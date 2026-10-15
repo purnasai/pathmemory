@@ -3765,16 +3765,22 @@ source = { editable = "." }
 dependencies = [
     { name = "agentlab" },
     { name = "falkordb" },
+    { name = "fastapi" },
+    { name = "mcp" },
     { name = "pytest" },
     { name = "requests" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "agentlab", specifier = ">=0.4.2" },
     { name = "falkordb", specifier = ">=1.8.0" },
+    { name = "fastapi", specifier = ">=0.143.2" },
+    { name = "mcp", specifier = ">=2.3.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "requests", specifier = ">=2.34.2" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
 ]
 
 [[package]]

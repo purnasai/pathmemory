@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PathMemory</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #161b22; --panel2: #1c232c; --line: #2a333f; --text: #e6edf3; --muted: #8b98a8;
+    --accent: #4f8cff; --graph: #2fbf71; --llm: #c792ea; --fail: #ff5c5c; --warn: #f2b84b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+  header .tag { color: var(--muted); }
+  header .chips { margin-left: auto; display: flex; gap: 8px; }
+  .chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
+  .chip b { color: var(--text); }
+  main { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); height: calc(100vh - 56px); }
+  #graphwrap { position: relative; border-right: 1px solid var(--line); }
+  #cy { position: absolute; inset: 0; }
+  .legend { position: absolute; left: 12px; bottom: 12px; background: rgba(22,27,34,.92); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+  .legend i { display: inline-block; width: 22px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+  .side { display: flex; flex-direction: column; min-height: 0; }
+  .tabs { display: flex; gap: 2px; padding: 10px 14px 0; border-bottom: 1px solid var(--line); }
+  .tabs button { background: none; border: 0; color: var(--muted); padding: 8px 12px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
+  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+  .pane { display: none; overflow: auto; padding: 14px 16px 30px; flex: 1; min-height: 0; }
+  .pane.on { display: block; }
+  select, input { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .goal { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 6px 0 10px; }
+  .goal .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .ok { color: var(--graph); } .bad { color: var(--fail); }
+  .events { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .ev { font-size: 12px; border-radius: 6px; padding: 3px 8px; background: var(--panel2); border: 1px solid var(--line); }
+  .ev.fail { border-color: var(--fail); color: #ffb3b3; } .ev.rec { border-color: var(--graph); color: #a9f0c6; }
+  .steps { display: grid; gap: 6px; }
+  .step { display: grid; grid-template-columns: 34px 92px 1fr; gap: 8px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+  .step.sel { border-color: var(--accent); }
+  .step .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .badge { font-size: 11px; font-weight: 600; border-radius: 4px; padding: 2px 6px; text-align: center; }
+  .badge.graph { background: rgba(47,191,113,.15); color: var(--graph); }
+  .badge.llm { background: rgba(199,146,234,.15); color: var(--llm); }
+  .step .page { color: var(--muted); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .step .act { margin-top: 2px; }
+  .step .think { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .step .err { color: var(--fail); font-size: 12px; margin-top: 3px; }
+  .shot { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #000; }
+  .shot img { display: block; width: 100%; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 18px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.cell { cursor: pointer; }
+  td.cell:hover { background: var(--panel2); }
+  h3 { margin: 18px 0 4px; font-size: 15px; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font-size: 12px; }
+  .routes .r { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
+  .muted { color: var(--muted); }
+  .avoid { display: grid; gap: 3px; max-height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 10px; font-size: 12px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; height: auto; } #graphwrap { height: 60vh; border-right: 0; border-bottom: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>PathMemory</h1>
+  <span class="tag">FalkorDB procedural memory for a browser agent</span>
+  <div class="chips" id="chips"></div>
+</header>
+<main>
+  <div id="graphwrap">
+    <div id="cy"></div>
+    <div class="legend">
+      <div><i style="background:#56606e"></i>learned step (thicker = more successes)</div>
+      <div><i style="background:var(--graph)"></i>route used in this run</div>
+      <div><i style="background:var(--fail)"></i>step that failed in this run</div>
+      <div><i style="background:var(--accent)"></i>current page</div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="tabs">
+      <button data-tab="run" class="on">Run replay</button>
+      <button data-tab="results">Results</button>
+      <button data-tab="query">Route query</button>
+    </div>
+    <div class="pane on" id="run">
+      <div class="row">
+        <select id="exp"></select><select id="task"></select><select id="mode"></select>
+      </div>
+      <div id="runview" class="muted">Pick a run.</div>
+    </div>
+    <div class="pane" id="results"></div>
+    <div class="pane" id="query">
+      <div class="row"><span class="muted">from</span><select id="qsrc"></select><span class="muted">to</span><select id="qdst"></select></div>
+      <div class="muted" style="font-size:12px;margin-bottom:4px">Pretend these steps are broken (FalkorDB must route around them):</div>
+      <div class="avoid" id="avoid"></div>
+      <div class="routes" id="qroutes"></div>
+      <details><summary class="muted">Cypher</summary><pre id="qcypher"></pre></details>
+    </div>
+  </div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const api = p => fetch(p).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.detail)));
+let G, cy, EXPS = [], runSeq = 0;
+
+function short(k) { return k.length > 34 ? k.slice(0, 33) + '…' : k; }
+
+async function loadGraph() {
+  G = await api('/api/graph');
+  $('#chips').innerHTML = `<span class="chip"><b>${G.stats.states}</b> pages</span><span class="chip"><b>${G.stats.edges}</b> verified steps</span><span class="chip"><b>${G.stats.tasks}</b> tasks learned</span>`;
+  const maxS = Math.max(1, ...G.edges.map(e => e.successes));
+  const els = [
+    ...G.nodes.map(n => ({ data: { id: n.key, label: short(n.key), work: n.goals.length ? 1 : 0, title: n.title } })),
+    ...G.edges.map(e => ({ data: { id: e.eid, source: e.src, target: e.dst, label: e.name, w: 1.5 + 3 * e.successes / maxS, fails: e.failures } })),
+  ];
+  cy = cytoscape({
+    container: $('#cy'), elements: els, wheelSensitivity: 0.2,
+    layout: { name: 'breadthfirst', directed: true, roots: ['/'], spacingFactor: 1.15, padding: 30 },
+    style: [
+      { selector: 'node', style: { 'background-color': '#2a333f', 'border-width': 1, 'border-color': '#56606e', label: 'data(label)', color: '#e6edf3', 'font-size': 10, 'text-valign': 'bottom', 'text-margin-y': 5, width: 18, height: 18, 'text-background-color': '#0f1216', 'text-background-opacity': .8, 'text-background-padding': 2 } },
+      { selector: 'node[work = 1]', style: { shape: 'round-rectangle', 'background-color': '#33404f' } },
+      { selector: 'edge', style: { width: 'data(w)', 'line-color': '#56606e', 'target-arrow-color': '#56606e', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', label: 'data(label)', 'font-size': 9, color: '#8b98a8', 'text-rotation': 'autorotate', 'text-background-color': '#0f1216', 'text-background-opacity': .85, 'text-background-padding': 1 } },
+      { selector: '.used', style: { 'line-color': '#2fbf71', 'target-arrow-color': '#2fbf71', color: '#a9f0c6', 'z-index': 9 } },
+      { selector: '.failed', style: { 'line-color': '#ff5c5c', 'target-arrow-color': '#ff5c5c', 'line-style': 'dashed', color: '#ffb3b3', 'z-index': 10 } },
+      { selector: 'node.visited', style: { 'background-color': '#1f5134', 'border-color': '#2fbf71' } },
+      { selector: 'node.cur', style: { 'border-color': '#4f8cff', 'border-width': 4, width: 24, height: 24 } },
+      { selector: '.dim', style: { opacity: .3 } },
+      { selector: 'edge.flat', style: { 'curve-style': 'unbundled-bezier', 'control-point-distances': [-55], 'control-point-weights': [0.5] } },
+    ],
+  });
+  // edges between nodes on the same row would run straight through the nodes in between: bend them
+  cy.edges().forEach(e => { if (Math.abs(e.source().position('y') - e.target().position('y')) < 5) e.addClass('flat'); });
+  cy.on('tap', 'node', e => { $('#qsrc').value = '/'; $('#qdst').value = e.target.id(); showTab('query'); runQuery(); });
+  const opts = G.nodes.map(n => `<option>${n.key}</option>`).join('');
+  $('#qsrc').innerHTML = opts; $('#qdst').innerHTML = opts;
+  $('#qsrc').value = '/'; $('#qdst').value = G.nodes.find(n => n.key.endsWith('collaboration'))?.key || G.nodes[0].key;
+  $('#avoid').innerHTML = G.edges.map(e => `<label><input type="checkbox" value="${e.eid}"> <span class="muted">${e.src}</span> → <b>${e.name}</b> → <span class="muted">${e.dst}</span> <span class="muted">(${e.successes}✓ ${e.failures}✗)</span></label>`).join('');
+}
+
+function clearMarks() { cy.elements().removeClass('used failed visited cur dim'); }
+
+function markRun(run, upto) {
+  clearMarks();
+  const steps = upto == null ? run.steps : run.steps.slice(0, upto + 1);
+  steps.forEach(s => cy.getElementById(s.page).addClass('visited'));
+  const ev = run.events || [];
+  // the route actually followed = the last route event (after any recovery)
+  const routes = ev.filter(e => e.event === 'route');
+  const last = routes[routes.length - 1];
+  if (last) for (let i = 0; i + 1 < last.keys.length; i++)
+    cy.edges().filter(e => e.source().id() === last.keys[i] && e.target().id() === last.keys[i + 1]).addClass('used');
+  ev.filter(e => e.event === 'edge_failed' && e.eid).forEach(e => cy.getElementById(e.eid).removeClass('used').addClass('failed'));
+  if (upto != null && run.steps[upto]) cy.getElementById(run.steps[upto].page).addClass('cur');
+}
+
+async function loadExperiments() {
+  EXPS = await api('/api/experiments');
+  $('#exp').innerHTML = EXPS.map((e, i) => `<option value="${i}">${e.title}</option>`).join('');
+  $('#exp').onchange = fillTasks; $('#task').onchange = fillModes; $('#mode').onchange = openRun;
+  // default to the most telling run: recovery after repair, members-4, graph
+  $('#exp').value = String(Math.max(0, EXPS.length - 1)); fillTasks();
+  if ([...$('#task').options].some(o => o.value === 'members-4')) { $('#task').value = 'members-4'; fillModes(); }
+  if ([...$('#mode').options].some(o => o.value === 'graph')) { $('#mode').value = 'graph'; }
+  openRun();
+  renderResults();
+}
+
+function fillTasks() {
+  const e = EXPS[$('#exp').value];
+  $('#task').innerHTML = Object.keys(e.tasks).map(t => `<option>${t}</option>`).join('');
+  fillModes();
+}
+function fillModes() {
+  const t = EXPS[$('#exp').value].tasks[$('#task').value];
+  $('#mode').innerHTML = Object.entries(t).map(([m, r]) => `<option value="${m}">${m} ${r.success ? '✓' : '✗'}</option>`).join('');
+  openRun();
+}
+
+async function openRun(dir) {
+  if (typeof dir !== 'string') {
+    const t = EXPS[$('#exp').value]?.tasks[$('#task').value];
+    const r = t && t[$('#mode').value];
+    if (!r) return;
+    dir = r.exp_dir;
+  }
+  const seq = ++runSeq;
+  const run = await api('/api/run?dir=' + encodeURIComponent(dir));
+  if (seq !== runSeq) return;  // a newer selection was made while this one loaded
+  const ev = run.events || [];
+  const evHtml = ev.filter(e => e.event !== 'replay').map(e => {
+    if (e.event === 'choose') return `<span class="ev">target page: <b>${e.target || 'none'}</b></span>`;
+    if (e.event === 'route') return `<span class="ev">route: ${e.keys.join(' → ')}</span>`;
+    if (e.event === 'edge_failed') return `<span class="ev fail">step failed: ${e.why}</span>`;
+    if (e.event === 'recovered') return `<span class="ev rec">rerouted via ${e.via.join(' → ')}</span>`;
+    if (e.event === 'no_route') return `<span class="ev fail">no route from ${e.from}</span>`;
+    return `<span class="ev">${e.event}</span>`;
+  }).join('');
+  const nGraph = run.steps.filter(s => s.source === 'graph').length;
+  $('#runview').innerHTML = `
+    <div class="goal">${run.goal.replace(/When you are done.*$/, '')}
+      <div class="meta"><span class="${run.success ? 'ok' : 'bad'}">${run.success ? 'success' : 'failed'}</span> ·
+      ${run.steps.length} steps · <span style="color:var(--graph)">${nGraph} replayed from memory (no LLM call)</span> ·
+      ${run.tokens.toLocaleString()} input tokens</div></div>
+    <div class="events">${evHtml}</div>
+    <div class="steps">${run.steps.map((s, i) => `
+      <div class="step" data-i="${i}">
+        <div class="n">#${s.n}</div>
+        <div class="badge ${s.source}">${s.source === 'graph' ? 'REPLAY' : 'LLM'}</div>
+        <div><div class="page">${s.page}</div><div class="act">${esc(s.action)}</div>
+          ${s.think && s.source !== 'graph' ? `<div class="think">${esc(s.think.slice(0, 220))}</div>` : ''}
+          ${s.error ? `<div class="err">${esc(s.error.slice(0, 160))}</div>` : ''}</div>
+      </div>`).join('')}</div>
+    <div class="shot" id="shot"></div>`;
+  const pick = i => {
+    document.querySelectorAll('.step').forEach(x => x.classList.toggle('sel', +x.dataset.i === i));
+    const s = run.steps[i];
+    $('#shot').innerHTML = s.screenshot ? `<img alt="screenshot before step ${s.n}" src="/api/screenshot?dir=${encodeURIComponent(run.dir)}&n=${s.n}">` : '';
+    markRun(run, i);
+  };
+  document.querySelectorAll('.step').forEach(x => x.onclick = () => pick(+x.dataset.i));
+  markRun(run, null);
+  if (run.steps.length) pick(0);
+}
+
+function esc(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]); }
+
+function renderResults() {
+  $('#results').innerHTML = EXPS.map((e, ei) => {
+    const s = e.summary;
+    const head = `<tr><th>mode</th><th>success</th><th>avg steps</th><th>LLM calls</th><th>replayed</th><th>input tokens</th><th>seconds</th></tr>`;
+    const rows = Object.entries(s).map(([m, v]) => `<tr><td>${m}</td><td>${v.success}/${v.tasks}</td><td>${v.steps}</td><td>${v.llm_calls}</td><td>${v.replayed}</td><td>${v.input_tokens.toLocaleString()}</td><td>${v.seconds}</td></tr>`).join('');
+    const modes = Object.keys(s);
+    const per = Object.entries(e.tasks).map(([t, r]) => `<tr><td>${t}</td>${modes.map(m => r[m] ? `<td class="cell" data-e="${ei}" data-t="${t}" data-m="${m}"><span class="${r[m].success ? 'ok' : 'bad'}">${r[m].success ? '✓' : '✗'}</span> ${r[m].steps} st · ${(r[m].input_tokens / 1000).toFixed(1)}k</td>` : '<td>–</td>').join('')}</tr>`).join('');
+    return `<h3>${e.title}</h3><table>${head}${rows}</table>
+      <table><tr><th>task</th>${modes.map(m => `<th>${m}</th>`).join('')}</tr>${per}</table>`;
+  }).join('') + `<p class="muted">Same agent, model, prompts and 15-step budget in every mode; only the memory differs. Click a cell to replay that run.</p>`;
+  document.querySelectorAll('td.cell').forEach(td => td.onclick = () => {
+    $('#exp').value = td.dataset.e; fillTasks(); $('#task').value = td.dataset.t; fillModes(); $('#mode').value = td.dataset.m; openRun(); showTab('run');
+  });
+}
+
+async function runQuery() {
+  const avoid = [...document.querySelectorAll('#avoid input:checked')].map(i => i.value);
+  const qs = new URLSearchParams({ src: $('#qsrc').value, dst: $('#qdst').value });
+  avoid.forEach(a => qs.append('avoid', a));
+  try {
+    const r = await api('/api/route?' + qs);
+    $('#qcypher').textContent = r.cypher;
+    clearMarks();
+    avoid.forEach(a => cy.getElementById(a).addClass('failed'));
+    if (!r.routes.length) { $('#qroutes').innerHTML = '<div class="r bad">No verified route.</div>'; return; }
+    const draw = route => {
+      cy.edges().removeClass('used');
+      route.edges.forEach(e => cy.getElementById(e.eid).addClass('used'));
+      route.keys.forEach(k => cy.getElementById(k).addClass('visited'));
+    };
+    $('#qroutes').innerHTML = r.routes.map((ro, i) => `<div class="r" data-i="${i}"><b>${ro.edges.length} clicks:</b> ${ro.edges.map(e => esc(e.name)).join(' → ') || '(already there)'}<div class="muted" style="font-size:12px">${ro.keys.join(' → ')}</div></div>`).join('');
+    document.querySelectorAll('#qroutes .r').forEach(x => x.onclick = () => draw(r.routes[+x.dataset.i]));
+    draw(r.routes[0]);
+  } catch (e) { $('#qroutes').innerHTML = `<div class="r bad">${e}</div>`; }
+}
+
+function showTab(t) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === t));
+  if (t === 'query') runQuery();
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+$('#qsrc').onchange = runQuery; $('#qdst').onchange = runQuery; $('#avoid').onchange = runQuery;
+
+loadGraph().then(loadExperiments);
+</script>
+</body>
+</html>
