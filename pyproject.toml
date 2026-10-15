@@ -1,0 +1,19 @@
+[project]
+name = "pathmemory"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "agentlab>=0.4.2",
+    "falkordb>=1.8.0",
+    "pytest>=9.1.1",
+    "requests>=2.34.2",
+]
+
+[project.scripts]
+pathmemory = "pathmemory:main"
+
+[build-system]
+requires = ["uv_build>=0.12.8,<0.13.0"]
+build-backend = "uv_build"
