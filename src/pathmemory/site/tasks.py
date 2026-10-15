@@ -131,13 +131,35 @@ TASKS = [
              repo_exists("byteblaze/design", fork=True)),
     TaskSpec("repos-4", "repos", "mutate", 'Create a milestone called "Beta" in the primer/design repository.',
              milestone_exists("primer/design", "Beta")),
-    TaskSpec("repos-5", "repos", "retrieve", "How many commits are on the main branch of a11yproject.com? Reply with the number.",
-             answer=["3"]),
+    # (Gitea's header commit/branch counters are cached and can disagree with the API, so no count questions here.)
+    TaskSpec("repos-5", "repos", "retrieve", "What is the description of the primer/design repository?",
+             answer=["primer design guidelines"]),
+    # --- explore: a second way into repositories (gives the graph an alternative route)
+    TaskSpec("explore-1", "explore", "navigate", "Open the Explore page that lists all repositories on this site.",
+             url_pattern=r"/explore/repos"),
+    TaskSpec("explore-2", "explore", "navigate", "Browse the site's public repositories and open the primer/design repository.",
+             url_pattern=r"/primer/design/?$"),
     # --- social
     TaskSpec("social-1", "social", "mutate", "Star the a11yproject.com repository.", starred("a11yproject/a11yproject.com")),
     TaskSpec("social-2", "social", "mutate", "Follow the user alice.", following("alice")),
 ]
 TASKS_BY_ID = {t.id: t for t in TASKS}
+
+# Recovery experiment: the dashboard's repository links disappear (e.g. a redesign), so the
+# remembered route "/ -> {owner}/{repo}" breaks while "/ -> Explore -> {owner}/{repo}" still works.
+HIDE_DASHBOARD_REPO_LINKS = r"""
+(() => {
+  const hide = () => {
+    if (location.pathname !== "/") return;
+    for (const a of document.querySelectorAll("main a, .page-content a")) {
+      const t = (a.textContent || "").trim();
+      if (/^[\w.-]+\/[\w.-]+$/.test(t) && a.style.display !== "none") a.style.display = "none";
+    }
+  };
+  new MutationObserver(hide).observe(document, {childList: true, subtree: true});
+  document.addEventListener("DOMContentLoaded", hide);
+})();
+"""
 
 
 class GiteaTask(AbstractBrowserTask):

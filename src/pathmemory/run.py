@@ -24,7 +24,7 @@ from pathmemory.config import settings
 from pathmemory.graph import GraphMemory
 from pathmemory.learn import FLAT_STORE, ingest
 from pathmemory.site import seed
-from pathmemory.site.tasks import TASKS_BY_ID, register_all
+from pathmemory.site.tasks import HIDE_DASHBOARD_REPO_LINKS, TASKS_BY_ID, register_all
 
 RESULTS = settings.root / "results"
 
@@ -32,6 +32,9 @@ RESULTS = settings.root / "results"
 TRAIN = ["members-1", "issues-1", "issues-3", "profile-1", "profile-3", "repos-1", "repos-4", "social-1"]
 TEST = ["members-2", "members-3", "members-4", "issues-2", "issues-4", "issues-5", "issues-6", "issues-7",
         "profile-2", "profile-4", "repos-2", "repos-3", "repos-5", "social-2"]
+# Learned after TRAIN to give the graph a second way into repos; RECOVERY tasks then run with that way broken.
+ALT_TRAIN = ["explore-1", "explore-2"]
+RECOVERY = ["members-2", "members-4", "issues-2", "issues-5", "repos-3"]
 
 
 def base_agent_args() -> GenericAgentArgs:
@@ -91,11 +94,12 @@ def write(rows, path: Path):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("phase", choices=["smoke", "learn", "eval"])
+    p.add_argument("phase", choices=["smoke", "learn", "eval", "recovery"])
     p.add_argument("tasks", nargs="*")
     p.add_argument("--modes", nargs="+", default=["none", "flat", "graph"])
     p.add_argument("--max-steps", type=int, default=15)
     p.add_argument("--tag", default=time.strftime("%Y%m%d-%H%M%S"))
+    p.add_argument("--keep", action="store_true", help="learn: add to existing memory instead of clearing it")
     a = p.parse_args()
     register_all()
     out = RESULTS / a.tag
@@ -108,8 +112,9 @@ def main():
 
     if a.phase == "learn":
         graph = GraphMemory()
-        graph.clear()
-        FLAT_STORE.unlink(missing_ok=True)
+        if not a.keep:
+            graph.clear()
+            FLAT_STORE.unlink(missing_ok=True)
         rows = [run_task(t, agent_args("none"), out / "learn", a.max_steps) for t in (a.tasks or TRAIN)]
         write(rows, out / "learn.jsonl")
         print(json.dumps(ingest([Path(r["exp_dir"]) for r in rows], graph)))
@@ -117,12 +122,12 @@ def main():
             print(r["task"], "OK" if r["success"] else "FAIL", r["steps"])
         return
 
-    rows = []
-    for t in a.tasks or TEST:
+    recovery = a.phase == "recovery"
+    for t in a.tasks or (RECOVERY if recovery else TEST):
         for mode in a.modes:
-            r = run_task(t, agent_args(mode), out / "eval", a.max_steps)
-            rows.append(r)
-            write([r], out / "eval.jsonl")
+            r = run_task(t, agent_args(mode), out / a.phase, a.max_steps,
+                         ui_break=HIDE_DASHBOARD_REPO_LINKS if recovery else None)
+            write([r], out / f"{a.phase}.jsonl")
             print(f"{t:10} {mode:5} {'OK  ' if r['success'] else 'FAIL'} steps={r['steps']:>2} "
                   f"llm={r['llm_steps']:>2} replay={r['replayed_steps']:>2} tok={r['input_tokens']:>6}")
 

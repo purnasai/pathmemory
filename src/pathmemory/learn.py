@@ -17,6 +17,7 @@ from pathmemory.site.tasks import TASKS_BY_ID
 from pathmemory.state import POPUP_ROLES, semantic_step, state_of
 
 FLAT_STORE = settings.root / "results" / "flat_memory.json"
+IGNORED_KINDS = {"send_msg_to_user", "noop", "scroll", "press", "clear", "focus"}
 
 
 def load_steps(exp_dir: Path):
@@ -59,22 +60,22 @@ def ingest(exp_dirs: list[Path], graph: GraphMemory) -> dict:
             continue
         spec = TASKS_BY_ID[tr["task_id"]]
         rows = tr["rows"]
+        # Every verified navigation click becomes an edge, wherever it happens (detours and repairs included).
+        # The work page is where the trajectory's final run of non-navigation actions took place.
         worksite, work_steps, pending = None, [], []
         for r in rows:
             step, moved = r["step"], r["src"].key != r["dst"].key
-            if worksite is None and step.kind == "click" and r["ok"]:
-                if moved and step.navigational:
-                    graph.record_transition(r["src"], step, r["dst"], ok=True, pre=pending)
-                    pending = []
-                    continue
-                if not moved and step.role in POPUP_ROLES:  # e.g. opens a dropdown; needed before the next edge
-                    pending.append(step)
-                    continue
-            if step.kind == "send_msg_to_user":
+            if step.kind == "click" and r["ok"] and moved and step.navigational:
+                graph.record_transition(r["src"], step, r["dst"], ok=True, pre=pending)
+                worksite, work_steps, pending = None, [], []
                 continue
-            if worksite is None:
-                worksite = r["src"]
-                work_steps = [p.text() for p in pending]
+            if step.kind == "click" and r["ok"] and not moved and step.role in POPUP_ROLES:
+                pending.append(step)  # e.g. opens a dropdown; needed before the next edge
+                continue
+            if step.kind in IGNORED_KINDS:
+                continue
+            if worksite is None or r["src"].key != worksite.key:
+                worksite, work_steps = r["src"], [p.text() for p in pending]
                 pending = []
             work_steps.append(step.text())
         if worksite is None and rows:  # nothing changed data: the work page is where the agent ended

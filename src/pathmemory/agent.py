@@ -216,7 +216,7 @@ class PathMemoryAgent(bgym.Agent):
                 self.expect, self.last_eid = item["dst"], item["eid"]
             return self._replayed(obs, f"click('{bid}')", item)
         if self.target and not self.hint:
-            self.hint = self._handover_hint(key)
+            self.hint = self._handover_hint(key, obs["url"])
         return None
 
     def _replayed(self, obs, action, item):
@@ -231,12 +231,20 @@ class PathMemoryAgent(bgym.Agent):
         return action, bgym.AgentInfo(think=think, chat_messages=[], stats={},
                                       extra_info={"pathmemory": {"source": "graph", "mode": self.mode, "log": list(self.log)}})
 
-    def _handover_hint(self, key):
+    def _handover_hint(self, key, url):
         site = next((s for s in self.graph.destinations() if s["key"] == self.target), None)
         if not site:
             return None
-        where = "PathMemory navigated you to" if key == self.target else "PathMemory could not finish the route to"
-        lines = [f"{where} the page {self.target}, which memory suggests is where this goal's work happens."]
+        # Anchor to the concrete URL: after the agent acts, it may land on another page with the same template
+        # (e.g. a fork at /byteblaze/design vs /primer/design) and must not mistake it for the starting point.
+        if key == self.target:
+            lines = [f"Memory note: before your first action, PathMemory replayed known navigation to {url} "
+                     f"(page type {self.target}), where this kind of goal is usually done. "
+                     "Any page you see after that is the result of your own actions, so check whether the goal "
+                     "is already complete before repeating anything."]
+        else:
+            lines = [f"Memory note: PathMemory tried to navigate to a page of type {self.target} but stopped at {url}. "
+                     "Continue from here yourself."]
         if site["goals"]:
             lines.append("Similar past tasks done on this page:")
         for goal, steps in zip(site["goals"], site["steps"]):
