@@ -3,6 +3,7 @@
     uv run python -m pathmemory.run smoke profile-3 members-1        # base agent on given tasks
     uv run python -m pathmemory.run learn                            # TRAIN tasks -> build memory
     uv run python -m pathmemory.run eval --modes none flat graph     # TEST tasks, frozen memory
+    uv run python -m pathmemory.run ingest results/x/learn/* --keep  # add saved runs to memory
 """
 
 import argparse
@@ -94,7 +95,7 @@ def write(rows, path: Path):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("phase", choices=["smoke", "learn", "eval", "recovery"])
+    p.add_argument("phase", choices=["smoke", "learn", "ingest", "eval", "recovery"])
     p.add_argument("tasks", nargs="*")
     p.add_argument("--modes", nargs="+", default=["none", "flat", "graph"])
     p.add_argument("--max-steps", type=int, default=15)
@@ -108,6 +109,14 @@ def main():
         for t in a.tasks:
             r = run_task(t, agent_args("none"), out, a.max_steps)
             print(json.dumps({k: v for k, v in r.items() if k != "log"}))
+        return
+
+    if a.phase == "ingest":  # add saved runs (e.g. a repair episode) to memory; tasks = run directories
+        graph = GraphMemory()
+        if not a.keep:
+            graph.clear()
+            FLAT_STORE.unlink(missing_ok=True)
+        print(json.dumps(ingest([Path(t) for t in a.tasks], graph)))
         return
 
     if a.phase == "learn":

@@ -3,6 +3,9 @@
 **FalkorDB procedural memory for browser agents: remember how a website works, reuse it on new tasks,
 and route around steps that break.**
 
+Graph Hacks (WeMakeDevs × FalkorDB), October 2026. **Tracks entered: 01 — Agents That Act on Connected Data;
+02 — Agent Memory and Coordination** (procedural memory that persists across tasks and sessions).
+
 Browser agents rediscover the same navigation on every task: open the repo, find Settings, find Collaborators.
 Every one of those clicks is an LLM call. PathMemory stores what the agent has *verified* about a site as a graph
 in FalkorDB and lets later tasks reuse it:
@@ -40,6 +43,56 @@ LLM adds the collaborator.*
 - With this model, memory changes **cost**, not success. Samples are small and on one self-built site —
   see [RESULTS.md](RESULTS.md) for every number, failure analysis and limits.
 
+## Graph data model
+
+```
+(:State {key, route, title})                         a page template, e.g. key "/:owner/:repo/issues?state=closed"
+(:State)-[:ACT {eid, kind, role, name, scope, pre,   a verified navigation click: element role + accessible name
+               successes, failures}]->(:State)       (entities templated: "{owner}/{repo}"), landmark scope,
+                                                     prerequisite clicks (e.g. open a dropdown), outcome counts
+(:Task {id, goal, cluster})-[:WORKED_AT {steps}]->(:State)
+                                                     where a past task did its real work, and what it did there
+```
+
+Graph `pathmemory` on FalkorDB (Docker, port 6391). Browse it at http://localhost:3391.
+
+### Cypher the product depends on
+
+All in `src/pathmemory/graph.py`, all parameterised.
+
+```cypher
+// route finding: shortest verified path that avoids banned (failed) steps, least-failed first
+MATCH (a:State {key:$src}), (b:State {key:$dst})
+MATCH p = (a)-[:ACT*1..6]->(b)
+WHERE all(r IN relationships(p) WHERE r.successes > 0 AND NOT r.eid IN $banned)
+RETURN [n IN nodes(p) | n.key] AS keys,
+       [r IN relationships(p) | [r.eid, r.kind, r.role, r.name, r.pre, r.scope]] AS edges,
+       length(p) AS hops, reduce(f = 0, r IN relationships(p) | f + r.failures) AS fails
+ORDER BY hops, fails LIMIT $k
+
+// learn a verified step (outcome counts accumulate across runs)
+MATCH (a:State {key:$src}), (b:State {key:$dst})
+MERGE (a)-[r:ACT {eid:$eid}]->(b)
+ON CREATE SET r.kind=$kind, r.role=$role, r.name=$name, r.scope=$scope, r.pre=$pre, r.successes=0, r.failures=0
+SET r.successes = r.successes + $s, r.failures = r.failures + $f
+
+// a remembered step broke
+MATCH ()-[r:ACT {eid:$eid}]->() SET r.failures = r.failures + 1
+
+// where past tasks did their work (shown to the destination chooser)
+MERGE (t:Task {id:$id}) SET t.goal=$goal, t.cluster=$cluster
+WITH t MATCH (s:State {key:$key}) MERGE (t)-[w:WORKED_AT]->(s) SET w.steps=$steps
+
+MATCH (s:State) OPTIONAL MATCH (t:Task)-[w:WORKED_AT]->(s)
+RETURN s.key, s.title, collect(t.goal), collect(w.steps) ORDER BY s.key
+```
+
+Why a graph and not a list of saved trajectories: every recovered route in the results combines edges from
+2–3 different tasks (e.g. `Explore` from one task, `Explore → {repo}` from a repair run, `Settings →
+Collaborators` from a third). No stored trajectory contains those routes; the graph query assembles them, and
+failure counts on shared edges affect every future route through them. Remove FalkorDB and graph mode has
+nothing to replay.
+
 ## How it works
 
 ```
@@ -59,19 +112,37 @@ LLM adds the collaborator.*
 Baselines use the same hint channel and the same frozen memory input, so the comparison is about the memory
 structure, not about who saw more data.
 
-## Quick start
+## Quick start (local; no hosted deployment)
+
+Needs Docker, [uv](https://docs.astral.sh/uv/), and an OpenAI API key. Downloads are small (Gitea ≈150 MB,
+FalkorDB ≈700 MB, Chromium). Full reproduction costs well under $1 in API calls with `gpt-6-luna`.
 
 ```bash
+git clone https://github.com/purnasai/pathmemory && cd pathmemory
+cp .env.example .env                                   # add OPENAI_API_KEY (and OPENAI_MODEL)
 uv sync && uv run playwright install chromium
 docker compose up -d                                   # FalkorDB :6391 (browser UI :3391), Gitea :3300
 uv run python -m pathmemory.site.seed --reset          # ~9 s: recreate and seed Gitea
-# .env: PATHMEMORY_ENV_FILE=<file with OPENAI_API_KEY and OPENAI_MODEL>
+uv run pytest -q                                       # 10 tests (needs FalkorDB)
+uv run pathmemory-ui                                   # demo UI on saved runs: http://localhost:8795
+```
 
-uv run python -m pathmemory.run learn --tag v1         # 8 training tasks -> memory
-uv run python -m pathmemory.run eval --tag v1          # 14 held-out tasks x {none, flat, graph}
-uv run python -m pathmemory.run recovery --tag v1      # same, with dashboard repo links hidden
+Reproduce the experiments (about 1 hour, runs one browser at a time):
+
+```bash
+uv run python -m pathmemory.run learn --tag v1                       # 8 training tasks -> memory
+uv run python -m pathmemory.run eval --tag v1                        # 14 held-out tasks x {none, flat, graph}
+uv run python -m pathmemory.run learn explore-1 explore-2 --keep --tag v1-alt
+uv run python -m pathmemory.run recovery --tag v1                    # dashboard repo links hidden, before repair
+# rebuild memory = training runs + one repair episode (the no-memory run that found a way around the break)
+uv run python -m pathmemory.run ingest results/v1/learn/* results/v1-alt/learn/* \
+    results/v1/recovery/*PathMemory-none_on_pathmemory.members-2_0
+uv run python -m pathmemory.run recovery members-4 issues-2 issues-5 repos-3 --modes flat graph --tag v1-repaired
 uv run python -m pathmemory.report results/v1/eval.jsonl
 ```
+
+The demo UI reads `results/`, which is not committed (screenshots and step logs are large); run the experiments
+first, or use the screenshots in `docs/`.
 
 Gitea login: `byteblaze` / `hackathon123`. 24 tasks in 6 groups live in `src/pathmemory/site/tasks.py`, each
 checked deterministically (Gitea API state, final URL, or the agent's answer).
@@ -122,6 +193,18 @@ src/pathmemory/
   mcp_server.py   MCP tools
   site/           Gitea seed data and BrowserGym tasks
 ```
+
+## AI assistance disclosure
+
+Built with AI coding assistants, as the rules allow:
+
+- **ChatGPT** was used to brainstorm and critique ideas, the architecture and the evaluation design.
+- **Claude Code (Claude Opus 5.5)** wrote most of the code, tests and docs, and ran the experiments, under my
+  direction. I chose the problem and the constraints (no large benchmark downloads, no employer-domain data,
+  fair baselines), reviewed each design decision (route templates, replaying only navigation, the shared
+  hint channel for baselines, the recovery protocol), and decided how to report the results, including the
+  failures.
+- All results in this repo come from real runs; nothing was edited by hand.
 
 ## Limits
 
