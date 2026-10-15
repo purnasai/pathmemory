@@ -12,6 +12,7 @@ every mode the LLM performs the actual data-changing actions.
 """
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -23,7 +24,15 @@ from agentlab.llm.tracking import cost_tracker_decorator
 
 from pathmemory.graph import GraphMemory
 from pathmemory.learn import FLAT_STORE
-from pathmemory.state import find_target, instantiate, state_of
+from pathmemory.state import find_target, instantiate, semantic_step, state_of
+
+def write_json(path, data):
+    """Atomic write, so a reader polling the file never sees half of it."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f)
+    os.replace(tmp, path)
+
 
 STOP = set("a an the to of in on my for and with as is it i me called named into reply number".split())
 
@@ -69,13 +78,14 @@ class PathMemoryAgentArgs(AgentArgs):
     mode: str = "graph"
     graph_name: str = "pathmemory"
     agent_name: str = field(default=None)
+    live_file: str | None = None  # if set, progress is written here after every step (demo UI "Live" tab)
 
     def __post_init__(self):
         self.agent_name = self.agent_name or f"PathMemory-{self.mode}"
 
     def make_agent(self):
         return PathMemoryAgent(self.base_args.make_agent(), self.mode, self.graph_name,
-                               self.base_args.chat_model_args.make_model())
+                               self.base_args.chat_model_args.make_model(), self.live_file)
 
     def set_benchmark(self, benchmark, demo_mode):
         self.base_args.set_benchmark(benchmark, demo_mode)
@@ -91,8 +101,10 @@ class PathMemoryAgentArgs(AgentArgs):
 
 
 class PathMemoryAgent(bgym.Agent):
-    def __init__(self, base, mode, graph_name, chooser_llm):
+    def __init__(self, base, mode, graph_name, chooser_llm, live_file=None):
         self.base, self.mode, self.llm = base, mode, chooser_llm
+        self.live_file = live_file
+        self.live_steps: list[dict] = []
         self.graph = GraphMemory(graph_name) if mode == "graph" else None
         self.log: list[dict] = []
         self.reset()
@@ -119,6 +131,22 @@ class PathMemoryAgent(bgym.Agent):
     # --- main loop ------------------------------------------------------------
     @cost_tracker_decorator
     def get_action(self, obs):
+        action, info = self._act(obs)
+        if self.live_file:
+            self._write_live(obs, action, info)
+        return action, info
+
+    def _write_live(self, obs, action, info):
+        st = state_of(obs)
+        pm = (info.extra_info or {}).get("pathmemory") or {}
+        self.live_steps.append({"n": len(self.live_steps), "url": obs["url"], "page": st.key,
+                                "action": semantic_step(action, obs, st.bindings).text() if action else "",
+                                "source": pm.get("source", "llm"), "think": info.think or "",
+                                "error": obs.get("last_action_error") or ""})
+        write_json(self.live_file, {"status": "running", "mode": self.mode, "steps": self.live_steps,
+                                    "events": self.log})
+
+    def _act(self, obs):
         if not self.started:
             self.started = True
             if self.mode == "flat":

@@ -20,7 +20,7 @@ from agentlab.experiments.loop import EnvArgs, ExpArgs
 from agentlab.llm.chat_api import OpenAIModelArgs
 from bgym import HighLevelActionSetArgs
 
-from pathmemory.agent import PathMemoryAgentArgs
+from pathmemory.agent import PathMemoryAgentArgs, write_json
 from pathmemory.config import settings
 from pathmemory.graph import GraphMemory
 from pathmemory.learn import FLAT_STORE, ingest
@@ -38,7 +38,7 @@ ALT_TRAIN = ["explore-1", "explore-2"]
 RECOVERY = ["members-2", "members-4", "issues-2", "issues-5", "repos-3"]
 
 
-def base_agent_args() -> GenericAgentArgs:
+def base_agent_args(demo: bool = False) -> GenericAgentArgs:
     model = OpenAIModelArgs(
         model_name=settings.openai_model,
         max_total_tokens=128_000,
@@ -47,7 +47,9 @@ def base_agent_args() -> GenericAgentArgs:
         temperature=1.0,  # gpt-6-luna only accepts the default
     )
     # chat = send_msg_to_user, bid = element actions. No "nav": goto(url) would let any mode skip navigation.
-    action = replace(FLAGS_CUSTOM.action, action_set=HighLevelActionSetArgs(subsets=["chat", "bid"], multiaction=False))
+    # demo=True animates each click inside the page (live runs in a visible browser)
+    action = replace(FLAGS_CUSTOM.action, action_set=HighLevelActionSetArgs(
+        subsets=["chat", "bid"], multiaction=False, demo_mode="default" if demo else None))
     flags = replace(FLAGS_CUSTOM, action=action, use_hints=False, be_cautious=False)
     return GenericAgentArgs(chat_model_args=model, flags=flags)
 
@@ -56,11 +58,11 @@ def agent_args(mode: str):
     return PathMemoryAgentArgs(base_args=base_agent_args(), mode=mode)
 
 
-def run_task(task_id: str, agent, out_dir: Path, max_steps=15, ui_break=None) -> dict:
+def run_task(task_id: str, agent, out_dir: Path, max_steps=15, ui_break=None, headless=True, slow_mo=None) -> dict:
     if TASKS_BY_ID[task_id].kind == "mutate":
         seed.reset()
-    env_args = EnvArgs(task_name=f"pathmemory.{task_id}", task_seed=0, max_steps=max_steps, headless=True,
-                       task_kwargs={"ui_break": ui_break} if ui_break else None)
+    env_args = EnvArgs(task_name=f"pathmemory.{task_id}", task_seed=0, max_steps=max_steps, headless=headless,
+                       slow_mo=slow_mo, task_kwargs={"ui_break": ui_break} if ui_break else None)
     exp = ExpArgs(agent_args=agent, env_args=env_args)
     exp.prepare(out_dir)
     t0 = time.time()
@@ -95,12 +97,15 @@ def write(rows, path: Path):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("phase", choices=["smoke", "learn", "ingest", "eval", "recovery"])
+    p.add_argument("phase", choices=["smoke", "learn", "ingest", "eval", "recovery", "live"])
     p.add_argument("tasks", nargs="*")
     p.add_argument("--modes", nargs="+", default=["none", "flat", "graph"])
     p.add_argument("--max-steps", type=int, default=15)
     p.add_argument("--tag", default=time.strftime("%Y%m%d-%H%M%S"))
     p.add_argument("--keep", action="store_true", help="learn: add to existing memory instead of clearing it")
+    p.add_argument("--mode", default="graph", help="live: memory mode")
+    p.add_argument("--break-ui", action="store_true", help="live: hide the dashboard repo links")
+    p.add_argument("--live-file", help="live: progress JSON for the demo UI")
     a = p.parse_args()
     register_all()
     out = RESULTS / a.tag
@@ -109,6 +114,24 @@ def main():
         for t in a.tasks:
             r = run_task(t, agent_args("none"), out, a.max_steps)
             print(json.dumps({k: v for k, v in r.items() if k != "log"}))
+        return
+
+    if a.phase == "live":  # one task in a visible, slowed-down browser; progress streamed to --live-file
+        task, live_file = a.tasks[0], a.live_file or str(out / "live.json")
+        out.mkdir(parents=True, exist_ok=True)
+        write_json(live_file, {"status": "starting", "mode": a.mode, "steps": [], "events": [],
+                               "note": "resetting the site" if TASKS_BY_ID[task].kind == "mutate" else "opening browser"})
+        agent = PathMemoryAgentArgs(base_args=base_agent_args(demo=True), mode=a.mode, live_file=live_file)
+        try:
+            r = run_task(task, agent, out / "live", a.max_steps, headless=False, slow_mo=700,
+                         ui_break=HIDE_DASHBOARD_REPO_LINKS if a.break_ui else None)
+        except Exception as e:  # noqa: BLE001 - shown in the UI
+            write_json(live_file, {**json.loads(Path(live_file).read_text()), "status": "error", "note": str(e)[:300]})
+            raise
+        final = json.loads(Path(live_file).read_text())
+        write_json(live_file, {**final, "status": "done", "success": r["success"], "tokens": r["input_tokens"],
+                               "seconds": r["seconds"], "dir": str(Path(r["exp_dir"]).relative_to(RESULTS))})
+        print(json.dumps({k: v for k, v in r.items() if k != "log"}))
         return
 
     if a.phase == "ingest":  # add saved runs (e.g. a repair episode) to memory; tasks = run directories

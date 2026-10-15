@@ -158,6 +158,9 @@ uv run pathmemory-ui        # http://localhost:8795
 - **Results**: all three experiments; click any cell to replay that run.
 - **Route query**: pick two pages, tick steps to treat as broken, and watch FalkorDB find a different route
   (with the Cypher it runs).
+- **Live run**: pick a task and a memory mode (optionally break the UI) and press Run. A visible Chromium window
+  does the task, slowed down, while the steps and the graph highlighting update live. Needs a desktop session
+  and an OpenAI key.
 
 ### MCP server
 
