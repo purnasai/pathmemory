@@ -18,6 +18,41 @@ from pathmemory.state import POPUP_ROLES, semantic_step, state_of
 
 FLAT_STORE = settings.root / "results" / "flat_memory.json"
 IGNORED_KINDS = {"send_msg_to_user", "noop", "scroll", "press", "clear", "focus"}
+# Live runs learn into the main memory. The memory the v1 experiments used is copied here first.
+BACKUP_GRAPH = "pathmemory_v1"
+FLAT_BACKUP = settings.root / "results" / "flat_memory.v1.json"
+
+
+def backup_memory(graph: GraphMemory) -> bool:
+    """Keep a copy of both memories before the first live write. Returns True if a copy was made now."""
+    made = graph.backup(BACKUP_GRAPH)
+    if FLAT_STORE.exists() and not FLAT_BACKUP.exists():
+        FLAT_BACKUP.write_text(FLAT_STORE.read_text())
+    return made
+
+
+def restore_memory(graph: GraphMemory) -> dict:
+    graph.restore(BACKUP_GRAPH)
+    if FLAT_BACKUP.exists():
+        FLAT_STORE.write_text(FLAT_BACKUP.read_text())
+    return graph.stats()
+
+
+def memory_diff(before: dict, after: dict) -> dict:
+    """What a run wrote to the graph: new pages and steps, steps confirmed again, failures recorded."""
+    new_steps, reinforced, failed = [], [], []
+    for eid, e in after["edges"].items():
+        b = before["edges"].get(eid)
+        row = {"eid": eid, "src": e["src"], "name": e["name"], "dst": e["dst"]}
+        if b is None:
+            new_steps.append(row)
+            continue
+        if e["successes"] > b["successes"]:
+            reinforced.append({**row, "successes": e["successes"], "by": e["successes"] - b["successes"]})
+        if e["failures"] > b["failures"]:
+            failed.append({**row, "failures": e["failures"], "by": e["failures"] - b["failures"]})
+    return {"new_pages": sorted(after["states"] - before["states"]), "new_steps": new_steps,
+            "reinforced": reinforced, "failures": failed, "new_tasks": sorted(after["tasks"] - before["tasks"])}
 
 
 def load_steps(exp_dir: Path):

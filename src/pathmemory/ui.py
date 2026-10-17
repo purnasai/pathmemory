@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from pathmemory.config import settings
+from pathmemory.learn import restore_memory
 from pathmemory.service import RESULTS, InvalidArgument, PathMemoryService, _safe_dir
 from pathmemory.site.tasks import TASKS, TASKS_BY_ID
 
@@ -72,6 +73,7 @@ class LiveRequest(BaseModel):
     task: str
     mode: str = "graph"
     break_ui: bool = False
+    learn: bool = True  # write the run's verified steps to FalkorDB if it succeeds
 
 
 @app.get("/api/tasks")
@@ -90,15 +92,16 @@ def live_start(req: LiveRequest):
     out.mkdir(parents=True, exist_ok=True)
     LIVE["file"], LIVE["log"] = out / "live.json", out / "run.log"
     cmd = [sys.executable, "-m", "pathmemory.run", "live", req.task, "--mode", req.mode, "--tag", tag,
-           "--live-file", str(LIVE["file"])] + (["--break-ui"] if req.break_ui else [])
+           "--live-file", str(LIVE["file"])] + (["--break-ui"] if req.break_ui else []) + (["--learn"] if req.learn else [])
     LIVE["proc"] = subprocess.Popen(cmd, cwd=settings.root, stdout=LIVE["log"].open("w"), stderr=subprocess.STDOUT)
     return {"started": tag}
 
 
 @app.get("/api/live")
 def live_status():
-    if not LIVE["file"]:
-        return {"status": "idle"}
+    if not LIVE["file"]:  # server restarted: show the most recent live run, if any
+        saved = sorted(RESULTS.glob("live-*/live.json"))
+        return json.loads(saved[-1].read_text()) if saved else {"status": "idle"}
     try:
         data = json.loads(LIVE["file"].read_text())
     except (FileNotFoundError, json.JSONDecodeError):
@@ -108,6 +111,17 @@ def live_status():
         tail = LIVE["log"].read_text().splitlines()[-5:] if LIVE["log"].exists() else []
         data.update(status="error", note=" | ".join(tail)[-400:])
     return data
+
+
+@app.post("/api/memory/restore")
+def memory_restore():
+    """Undo live learning: put back the memory the v1 experiments used."""
+    if LIVE["proc"] and LIVE["proc"].poll() is None:
+        raise HTTPException(409, "a live run is going")
+    try:
+        return restore_memory(svc.graph)
+    except ValueError as e:  # no live run has learned anything yet
+        raise HTTPException(400, str(e)) from e
 
 
 def main():

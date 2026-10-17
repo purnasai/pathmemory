@@ -24,7 +24,7 @@ in FalkorDB and lets later tasks reuse it:
 
 ![Recovery run in the demo UI](docs/ui_recovery.png)
 *A held-out task with the UI broken: the remembered dashboard link is gone (red). FalkorDB reroutes through
-Explore (green) using steps learned in three different tasks; 4 clicks are replayed with no LLM call, then the
+Explore (green), a route verified by one earlier repair run; 4 clicks are replayed with no LLM call, then the
 LLM adds the collaborator.*
 
 ## Results (local Gitea, `gpt-6-luna`, same agent/prompt/budget in every mode)
@@ -87,11 +87,13 @@ MATCH (s:State) OPTIONAL MATCH (t:Task)-[w:WORKED_AT]->(s)
 RETURN s.key, s.title, collect(t.goal), collect(w.steps) ORDER BY s.key
 ```
 
-Why a graph and not a list of saved trajectories: every recovered route in the results combines edges from
-2–3 different tasks (e.g. `Explore` from one task, `Explore → {repo}` from a repair run, `Settings →
-Collaborators` from a third). No stored trajectory contains those routes; the graph query assembles them, and
-failure counts on shared edges affect every future route through them. Remove FalkorDB and graph mode has
-nothing to replay.
+Why a graph and not a list of saved trajectories: two of the four recovered routes (`issues-2`, `issues-5`)
+combine edges from three different tasks (`Explore` from `explore-1`, `Explore → {repo}` from a repair run,
+`{repo} → Issues → New Issue` from `issues-1`) and exist in no stored trajectory; the graph query assembles
+them. The other two (`members-4`, `repos-3`) follow a route the repair run contains in full; there the gain is
+replay without the LLM, since flat memory had the same trajectory. Failure counts on shared edges affect every
+future route through them. Remove FalkorDB and graph mode has nothing to replay. Per-hop provenance:
+`uv run python -m pathmemory.provenance` → `results/v1-repaired/provenance.json`.
 
 ## How it works
 
@@ -159,8 +161,12 @@ uv run pathmemory-ui        # http://localhost:8795
 - **Route query**: pick two pages, tick steps to treat as broken, and watch FalkorDB find a different route
   (with the Cypher it runs).
 - **Live run**: pick a task and a memory mode (optionally break the UI) and press Run. A visible Chromium window
-  does the task, slowed down, while the steps and the graph highlighting update live. Needs a desktop session
-  and an OpenAI key.
+  does the task, slowed down, while the steps and the graph highlighting update live. With **learn** ticked, a
+  successful run writes back to FalkorDB as it finishes (same rule as the experiments: only verified clicks from
+  successful runs): new steps, steps confirmed again, steps that failed, and the task's worksite. The UI lists the
+  write and highlights it on the graph in yellow. The experiments' memory is copied to graph `pathmemory_v1` before
+  the first live write; **Reset memory to v1** (or `uv run python -m pathmemory.run restore-memory`) puts it back.
+  Needs a desktop session and an OpenAI key.
 
 ### MCP server
 
@@ -182,6 +188,28 @@ uv run pathmemory-mcp       # stdio
 Fixed, parameterised Cypher only; no tool accepts Cypher. `tests/test_mcp.py` runs the full
 route → break → teach → recompose story over stdio.
 
+## Evidence and persistence
+
+The run logs behind every table are committed in `docs/evidence/` (JSONL summaries; screenshots and step pickles
+stay in the git-ignored `results/`). Recompute any table without re-running the agent:
+
+```bash
+uv run python -m pathmemory.report docs/evidence/v1/eval.jsonl              # normal UI, 14 tasks x 3 modes
+uv run python -m pathmemory.report docs/evidence/v1/recovery.jsonl          # UI break, before repair
+uv run python -m pathmemory.report docs/evidence/v1-repaired/recovery.jsonl # UI break, after one repair episode
+```
+
+Re-running the experiments with the LLM gives different numbers run to run (`gpt-6-luna` only accepts
+temperature 1); `docs/evidence/v1-repeat*` are two repeats of `repos-3` (one failed before the hint fix, one
+passed after it).
+
+**Persistence across sessions** (checked 2026-10-18, `docs/evidence/persistence/`): one process queried the
+memory (11 page templates, 11 verified steps, 10 task worksites) and found the reroute
+`/ → Explore → {repo} → Settings → Collaborators` around the broken dashboard step; FalkorDB was saved and the
+container restarted; a new process got the same counts and the same route. The memory lives in FalkorDB, not in
+the agent process. The compose file has no volume, so `docker compose down` deletes the memory; `restart`, stop
+and start keep it.
+
 ## Layout
 
 ```
@@ -194,6 +222,7 @@ src/pathmemory/
   service.py      shared API for UI + MCP
   ui.py, static/  demo UI
   mcp_server.py   MCP tools
+  provenance.py   audit: which saved episode taught each hop of a replayed route
   site/           Gitea seed data and BrowserGym tasks
 ```
 

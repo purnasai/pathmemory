@@ -109,7 +109,13 @@ class PathMemoryService:
 
 def _row(r):
     return {k: r[k] for k in ("success", "steps", "llm_steps", "replayed_steps", "input_tokens", "seconds")} | {
-        "exp_dir": str(Path(r["exp_dir"]).relative_to(RESULTS))}
+        "exp_dir": _rel(r["exp_dir"])}
+
+
+def _rel(exp_dir: str) -> str:
+    """Saved rows hold absolute paths from wherever the run happened; keep the part under results/."""
+    parts = Path(exp_dir).parts
+    return str(Path(*parts[len(parts) - parts[::-1].index("results"):]))
 
 
 def _safe_dir(exp_dir: str) -> Path:

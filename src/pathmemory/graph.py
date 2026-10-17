@@ -23,7 +23,9 @@ def edge_id(src: str, step: Step, dst: str) -> str:
 
 class GraphMemory:
     def __init__(self, name: str = "pathmemory"):
-        self.g = FalkorDB(host=settings.falkordb_host, port=settings.falkordb_port).select_graph(name)
+        self.name = name
+        self.db = FalkorDB(host=settings.falkordb_host, port=settings.falkordb_port)
+        self.g = self.db.select_graph(name)
 
     def q(self, cypher: str, **params):
         return self.g.query(cypher, params).result_set
@@ -99,6 +101,28 @@ class GraphMemory:
         )
         return [{"keys": keys, "edges": [dict(zip(("eid", "kind", "role", "name", "pre", "scope"), e)) for e in edges]}
                 for keys, edges, _, _ in rows]
+
+    def snapshot(self) -> dict:
+        """Pages, tasks and edge counters, so a write can be diffed (see learn.memory_diff)."""
+        edges = {eid: {"src": a, "name": n, "dst": b, "successes": s, "failures": f}
+                 for eid, a, n, b, s, f in self.q(
+                     "MATCH (a:State)-[r:ACT]->(b:State) RETURN r.eid, a.key, r.name, b.key, r.successes, r.failures")}
+        return {"edges": edges, "states": {k for (k,) in self.q("MATCH (s:State) RETURN s.key")},
+                "tasks": {t for (t,) in self.q("MATCH (t:Task) RETURN t.id")}}
+
+    # --- backup (live runs write to memory; the experiments' graph is kept as a copy) -------------
+    def backup(self, copy_name: str) -> bool:
+        """Copy this graph to copy_name once; later calls keep the first copy."""
+        if copy_name in self.db.list_graphs():
+            return False
+        self.g.copy(copy_name)
+        return True
+
+    def restore(self, copy_name: str):
+        if copy_name not in self.db.list_graphs():
+            raise ValueError(f"no backup graph {copy_name!r}")
+        self.clear()
+        self.db.select_graph(copy_name).copy(self.name)
 
     def stats(self) -> dict:
         n = self.q("MATCH (s:State) RETURN count(s)")[0][0]

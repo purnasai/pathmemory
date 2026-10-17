@@ -64,6 +64,11 @@
   button.go:disabled { opacity: .5; cursor: default; }
   .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--graph); margin-right: 6px; animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .2; } }
+  .mem { background: var(--panel); border: 1px solid var(--warn); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+  .mem h4 { margin: 0 0 6px; font-size: 14px; color: var(--warn); }
+  .mem ul { margin: 4px 0 8px 18px; padding: 0; font-size: 13px; }
+  .mem .k { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+  button.plain { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
   .avoid { display: grid; gap: 3px; max-height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 10px; font-size: 12px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; height: auto; } #graphwrap { height: 60vh; border-right: 0; border-bottom: 1px solid var(--line); } }
 </style>
@@ -82,6 +87,7 @@
       <div><i style="background:var(--graph)"></i>route used in this run</div>
       <div><i style="background:var(--fail)"></i>step that failed in this run</div>
       <div><i style="background:var(--accent)"></i>current page</div>
+      <div><i style="background:var(--warn)"></i>written by the last live run</div>
     </div>
   </div>
   <div class="side">
@@ -108,7 +114,8 @@
     <div class="pane" id="live">
       <div class="row"><select id="ltask"></select><select id="lmode"><option value="graph">graph memory</option><option value="flat">flat memory</option><option value="none">no memory</option></select></div>
       <div class="row"><label><input type="checkbox" id="lbreak" checked> break the UI (hide the dashboard's repo links)</label></div>
-      <div class="row"><button id="lgo" class="go">Run in a visible browser</button><span id="lstatus" class="muted"></span></div>
+      <div class="row"><label><input type="checkbox" id="llearn" checked> learn: if the run succeeds, write its verified steps to FalkorDB</label></div>
+      <div class="row"><button id="lgo" class="go">Run in a visible browser</button><button id="lreset" class="plain">Reset memory to v1</button><span id="lstatus" class="muted"></span></div>
       <div class="muted" style="font-size:12px;margin-bottom:10px">A Chromium window opens on this machine and does the task, slowed down so each click is visible. Data-changing tasks reset the site first (about 10 s).</div>
       <div id="lview"></div>
     </div>
@@ -123,6 +130,7 @@ function short(k) { return k.length > 34 ? k.slice(0, 33) + '…' : k; }
 
 async function loadGraph() {
   G = await api('/api/graph');
+  if (cy) cy.destroy();
   $('#chips').innerHTML = `<span class="chip"><b>${G.stats.states}</b> pages</span><span class="chip"><b>${G.stats.edges}</b> verified steps</span><span class="chip"><b>${G.stats.tasks}</b> tasks learned</span>`;
   const maxS = Math.max(1, ...G.edges.map(e => e.successes));
   const els = [
@@ -137,6 +145,8 @@ async function loadGraph() {
       { selector: 'node[work = 1]', style: { shape: 'round-rectangle', 'background-color': '#33404f' } },
       { selector: 'edge', style: { width: 'data(w)', 'line-color': '#56606e', 'target-arrow-color': '#56606e', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', label: 'data(label)', 'font-size': 9, color: '#8b98a8', 'text-rotation': 'autorotate', 'text-background-color': '#0f1216', 'text-background-opacity': .85, 'text-background-padding': 1 } },
       { selector: '.used', style: { 'line-color': '#2fbf71', 'target-arrow-color': '#2fbf71', color: '#a9f0c6', 'z-index': 9 } },
+      { selector: '.learned', style: { 'line-color': '#f2b84b', 'target-arrow-color': '#f2b84b', color: '#f7d58f', width: 4, 'z-index': 11 } },
+      { selector: 'node.learned', style: { 'border-color': '#f2b84b', 'border-width': 3 } },
       { selector: '.failed', style: { 'line-color': '#ff5c5c', 'target-arrow-color': '#ff5c5c', 'line-style': 'dashed', color: '#ffb3b3', 'z-index': 10 } },
       { selector: 'node.visited', style: { 'background-color': '#1f5134', 'border-color': '#2fbf71' } },
       { selector: 'node.cur', style: { 'border-color': '#4f8cff', 'border-width': 4, width: 24, height: 24 } },
@@ -153,7 +163,7 @@ async function loadGraph() {
   $('#avoid').innerHTML = G.edges.map(e => `<label><input type="checkbox" value="${e.eid}"> <span class="muted">${e.src}</span> → <b>${e.name}</b> → <span class="muted">${e.dst}</span> <span class="muted">(${e.successes}✓ ${e.failures}✗)</span></label>`).join('');
 }
 
-function clearMarks() { cy.elements().removeClass('used failed visited cur dim'); }
+function clearMarks() { cy.elements().removeClass('used failed visited cur dim learned'); }
 
 function markRun(run, upto) {
   clearMarks();
@@ -209,6 +219,7 @@ async function openRun(dir) {
     if (e.event === 'edge_failed') return `<span class="ev fail">step failed: ${e.why}</span>`;
     if (e.event === 'recovered') return `<span class="ev rec">rerouted via ${e.via.join(' → ')}</span>`;
     if (e.event === 'no_route') return `<span class="ev fail">no route from ${e.from}</span>`;
+    if (e.event === 'retry') return `<span class="ev">retried '${esc(e.target)}' (page was still moving)</span>`;
     return `<span class="ev">${e.event}</span>`;
   }).join('');
   const nGraph = run.steps.filter(s => s.source === 'graph').length;
@@ -283,14 +294,16 @@ async function initLive() {
   $('#ltask').innerHTML = tasks.map(t => `<option value="${t.id}">${t.id} — ${esc(t.goal.slice(0, 60))}</option>`).join('');
   $('#ltask').value = 'members-4';
   $('#lgo').onclick = startLive;
+  $('#lreset').onclick = resetMemory;
   const cur = await api('/api/live');
   if (cur.status === 'running' || cur.status === 'starting') { $('#lgo').disabled = true; pollLive(); }
+  else if (cur.status === 'done' || cur.status === 'error') renderLive(cur);  // page reloaded after a run
 }
 async function startLive() {
   $('#lgo').disabled = true;
   try {
     await fetch('/api/live', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task: $('#ltask').value, mode: $('#lmode').value, break_ui: $('#lbreak').checked }) })
+      body: JSON.stringify({ task: $('#ltask').value, mode: $('#lmode').value, break_ui: $('#lbreak').checked, learn: $('#llearn').checked }) })
       .then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.detail)));
     $('#lview').innerHTML = ''; pollLive();
   } catch (e) { $('#lstatus').textContent = e; $('#lgo').disabled = false; }
@@ -315,15 +328,50 @@ function renderLive(r) {
     if (e.event === 'edge_failed') return `<span class="ev fail">step failed: ${esc(e.why)}</span>`;
     if (e.event === 'recovered') return `<span class="ev rec">rerouted via ${e.via.join(' → ')}</span>`;
     if (e.event === 'no_route') return `<span class="ev fail">no route from ${e.from}</span>`;
+    if (e.event === 'retry') return `<span class="ev">retried '${esc(e.target)}' (page was still moving)</span>`;
     return '';
   }).join('');
-  $('#lview').innerHTML = `<div class="events">${ev}</div><div class="steps">${(r.steps || []).map(s => `
+  $('#lview').innerHTML = `${memHtml(r.memory)}<div class="events">${ev}</div><div class="steps">${(r.steps || []).map(s => `
     <div class="step"><div class="n">#${s.n}</div><div class="badge ${s.source}">${s.source === 'graph' ? 'REPLAY' : 'LLM'}</div>
       <div><div class="page">${s.page}</div><div class="act">${esc(s.action)}</div>
       ${s.think && s.source !== 'graph' ? `<div class="think">${esc(s.think.slice(0, 220))}</div>` : ''}</div></div>`).join('')}</div>`;
   if (r.steps && r.steps.length) markRun(r, r.steps.length - 1); else if (r.events && r.events.length) markRun({ steps: [], events: r.events }, null);
+  if (r.status === 'done' && r.memory && r.dir !== shownWrite) {  // memory changed: redraw the graph once and show the write
+    shownWrite = r.dir;
+    loadGraph().then(() => { markRun(r, null); showWrite(r.memory); });
+  }
   const link = $('#lreplay');
   if (link) link.onclick = ev2 => { ev2.preventDefault(); showTab('run'); openRun(r.dir); };
+}
+
+let shownWrite = null;
+function memHtml(m) {
+  if (!m) return '';
+  const step = e => `<li><span class="k">${esc(e.src)}</span> → <b>${esc(e.name)}</b> → <span class="k">${esc(e.dst)}</span>${e.by ? ` <span class="muted">(${e.successes ?? e.failures} total)</span>` : ''}</li>`;
+  const list = (title, xs) => xs.length ? `<div>${title}</div><ul>${xs.map(step).join('')}</ul>` : '';
+  const head = m.learned ? 'Written to FalkorDB from this run' : 'Run failed: nothing learned (only successful runs become memory)';
+  return `<div class="mem"><h4>${head}</h4>
+    ${list(`<b>${m.new_steps.length}</b> new verified step${m.new_steps.length === 1 ? '' : 's'}`, m.new_steps)}
+    ${list(`<b>${m.reinforced.length}</b> known step${m.reinforced.length === 1 ? '' : 's'} confirmed again (success count +1)`, m.reinforced)}
+    ${list(`<b>${m.failures.length}</b> step${m.failures.length === 1 ? '' : 's'} marked failed during the run`, m.failures)}
+    ${m.new_pages.length ? `<div><b>${m.new_pages.length}</b> new page${m.new_pages.length === 1 ? '' : 's'}: <span class="k">${m.new_pages.map(esc).join(', ')}</span></div>` : ''}
+    ${m.new_tasks.length ? `<div>new task worksite: <span class="k">${m.new_tasks.map(esc).join(', ')}</span></div>` : ''}
+    <div class="muted" style="margin-top:6px">Memory now: ${m.stats.states} pages · ${m.stats.edges} verified steps · ${m.stats.tasks} tasks</div>
+    <details><summary class="muted">Cypher used for each step</summary><pre>MATCH (a:State {key:$src}), (b:State {key:$dst})
+MERGE (a)-[r:ACT {eid:$eid}]->(b)
+ON CREATE SET r.kind=$kind, r.role=$role, r.name=$name, r.successes=0, r.failures=0
+SET r.successes = r.successes + 1</pre></details></div>`;
+}
+function showWrite(m) {
+  m.new_steps.concat(m.reinforced).forEach(e => cy.getElementById(e.eid).removeClass('used').addClass('learned'));
+  m.new_pages.forEach(k => cy.getElementById(k).addClass('learned'));
+}
+async function resetMemory() {
+  try {
+    const s = await fetch('/api/memory/restore', { method: 'POST' }).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.detail)));
+    $('#lstatus').textContent = `memory reset to v1: ${s.states} pages · ${s.edges} steps · ${s.tasks} tasks`;
+    shownWrite = null; await loadGraph();
+  } catch (e) { $('#lstatus').textContent = e; }
 }
 
 function showTab(t) {

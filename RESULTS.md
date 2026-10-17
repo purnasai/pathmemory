@@ -24,7 +24,8 @@ Test tasks are different tasks in the same groups (members, issues, profile, rep
   (`issues-6`, `issues-7`) it navigated away from a dashboard that already showed the answer.
 - The graph failure (`repos-3`, fork) was caused by the memory hint: after forking, the agent landed on a page of
   the same type and thought it was back at the start. The hint now names the exact URL where replay ended;
-  re-run passed (4 steps). Table shows the original failing run.
+  re-run passed (4 steps; `results/v1-repeat2`). A repeat before that fix also failed (`results/v1-repeat`).
+  Table shows the original failing run.
 
 ## 2. UI break: dashboard repository links hidden
 
@@ -61,9 +62,17 @@ Per task (graph vs flat):
 | issues-5 | OK, 6 steps, 28.8k | OK, 5 steps, 6.7k | `/ → Explore → {repo} → Issues` |
 | repos-3 | OK, 5 steps, 19.9k | FAIL (15 steps) | `/ → Explore → {repo}` — replay correct, LLM then misread the finished fork (the no-memory agent made the same mistake before repair) |
 
-**Composition:** every recovered route was stitched from edges learned in different tasks: `Explore` from
-`explore-1`, `Explore → {repo}` from the repair episode, `Settings → Collaborators` from `members-1`,
-`Issues → New Issue` from `issues-1`. No single past trajectory contains any of these routes.
+**Composition (audited 2026-10-18 with `uv run python -m pathmemory.provenance` (output: `results/v1-repaired/provenance.json`)):** ACT edges do not store their source task, so the audit
+re-derives which saved episode taught each replayed hop.
+
+- `issues-2` and `issues-5` are genuinely composed: `/ → Explore` (from `explore-1` or the repair episode),
+  `Explore → {repo}` (repair episode `members-2` only), `{repo} → Issues → New Issue` (`issues-1` only).
+  No single episode contains either route. Both succeeded.
+- `members-4` and `repos-3` are **not** composed: every hop of their route also appears in the one repair episode
+  (`members-2`). Flat memory was given that same trajectory, so on `members-4` the difference
+  (7 steps / 8.0k tokens vs. 14 / 73.5k) comes from replaying the route without the LLM, not from composition.
+- An earlier version of this file said every recovered route was composed and none was in a single trajectory.
+  That was wrong for two of the four tasks.
 
 Excluding `repos-3`, graph used **~4× fewer input tokens than flat** after the repair (9.9k vs 41.8k avg).
 

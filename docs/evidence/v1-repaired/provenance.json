@@ -1,0 +1,154 @@
+[
+ {
+  "task": "members-4",
+  "success": true,
+  "hops": [
+   {
+    "from": "/",
+    "to": "/explore/repos",
+    "taught_by": [
+     "explore-1 (none)",
+     "members-2 (none)"
+    ]
+   },
+   {
+    "from": "/explore/repos",
+    "to": "/:owner/:repo",
+    "taught_by": [
+     "members-2 (none)"
+    ]
+   },
+   {
+    "from": "/:owner/:repo",
+    "to": "/:owner/:repo/settings",
+    "taught_by": [
+     "members-1 (none)",
+     "members-2 (none)"
+    ]
+   },
+   {
+    "from": "/:owner/:repo/settings",
+    "to": "/:owner/:repo/settings/collaboration",
+    "taught_by": [
+     "members-1 (none)",
+     "members-2 (none)"
+    ]
+   }
+  ],
+  "distinct_source_tasks": [
+   "explore-1",
+   "members-1",
+   "members-2"
+  ],
+  "single_episode_with_whole_route": [
+   "members-2"
+  ],
+  "unexplained_hops": 0
+ },
+ {
+  "task": "issues-2",
+  "success": true,
+  "hops": [
+   {
+    "from": "/",
+    "to": "/explore/repos",
+    "taught_by": [
+     "explore-1 (none)",
+     "members-2 (none)"
+    ]
+   },
+   {
+    "from": "/explore/repos",
+    "to": "/:owner/:repo",
+    "taught_by": [
+     "members-2 (none)"
+    ]
+   },
+   {
+    "from": "/:owner/:repo",
+    "to": "/:owner/:repo/issues",
+    "taught_by": [
+     "issues-1 (none)"
+    ]
+   },
+   {
+    "from": "/:owner/:repo/issues",
+    "to": "/:owner/:repo/issues/new",
+    "taught_by": [
+     "issues-1 (none)"
+    ]
+   }
+  ],
+  "distinct_source_tasks": [
+   "explore-1",
+   "issues-1",
+   "members-2"
+  ],
+  "single_episode_with_whole_route": [],
+  "unexplained_hops": 0
+ },
+ {
+  "task": "issues-5",
+  "success": true,
+  "hops": [
+   {
+    "from": "/",
+    "to": "/explore/repos",
+    "taught_by": [
+     "explore-1 (none)",
+     "members-2 (none)"
+    ]
+   },
+   {
+    "from": "/explore/repos",
+    "to": "/:owner/:repo",
+    "taught_by": [
+     "members-2 (none)"
+    ]
+   },
+   {
+    "from": "/:owner/:repo",
+    "to": "/:owner/:repo/issues",
+    "taught_by": [
+     "issues-1 (none)"
+    ]
+   }
+  ],
+  "distinct_source_tasks": [
+   "explore-1",
+   "issues-1",
+   "members-2"
+  ],
+  "single_episode_with_whole_route": [],
+  "unexplained_hops": 0
+ },
+ {
+  "task": "repos-3",
+  "success": false,
+  "hops": [
+   {
+    "from": "/",
+    "to": "/explore/repos",
+    "taught_by": [
+     "explore-1 (none)",
+     "members-2 (none)"
+    ]
+   },
+   {
+    "from": "/explore/repos",
+    "to": "/:owner/:repo",
+    "taught_by": [
+     "members-2 (none)"
+    ]
+   }
+  ],
+  "distinct_source_tasks": [
+   "explore-1",
+   "members-2"
+  ],
+  "single_episode_with_whole_route": [
+   "members-2"
+  ],
+  "unexplained_hops": 0
+ }
+]

@@ -100,6 +100,11 @@ class PathMemoryAgentArgs(AgentArgs):
         return self.base_args.close()
 
 
+def _transient(err: str) -> bool:
+    """Playwright gave up because the element was moving or covered, not because it was missing."""
+    return "Timeout" in err and ("not stable" in err or "intercepts pointer events" in err)
+
+
 class PathMemoryAgent(bgym.Agent):
     def __init__(self, base, mode, graph_name, chooser_llm, live_file=None):
         self.base, self.mode, self.llm = base, mode, chooser_llm
@@ -124,6 +129,7 @@ class PathMemoryAgent(bgym.Agent):
         self.route = None  # {"keys": [...], "edges": [...]}, plus position
         self.expect = None  # state key expected after the last replayed click
         self.last_eid = None
+        self.last_item = None  # last replayed navigation click, kept so a transient timeout can be retried once
         self.target, self.bindings = None, {}
         self.banned: list[str] = []
         self.recoveries = 0
@@ -224,7 +230,15 @@ class PathMemoryAgent(bgym.Agent):
     def _replay_step(self, obs):
         key = state_of(obs).key
         if self.expect and key != self.expect:
-            self._fail(key, f"expected {self.expect}")
+            err = obs.get("last_action_error") or ""
+            if self.last_item and not self.last_item.get("retried") and _transient(err):
+                # the click timed out while the page was still moving: not evidence the step is broken
+                self.last_item["retried"] = True
+                self.queue.insert(0, self.last_item)
+                self.expect, self.last_eid = None, None
+                self.log.append({"event": "retry", "target": self.last_item["name"]})
+            else:
+                self._fail(key, f"expected {self.expect}")
         elif self.expect:
             self.expect, self.last_eid = None, None
         while self.queue:
@@ -241,7 +255,7 @@ class PathMemoryAgent(bgym.Agent):
                 continue
             self.queue.pop(0)
             if not item["pre"]:
-                self.expect, self.last_eid = item["dst"], item["eid"]
+                self.expect, self.last_eid, self.last_item = item["dst"], item["eid"], item
             return self._replayed(obs, f"click('{bid}')", item)
         if self.target and not self.hint:
             self.hint = self._handover_hint(key, obs["url"])

@@ -4,6 +4,8 @@
     uv run python -m pathmemory.run learn                            # TRAIN tasks -> build memory
     uv run python -m pathmemory.run eval --modes none flat graph     # TEST tasks, frozen memory
     uv run python -m pathmemory.run ingest results/x/learn/* --keep  # add saved runs to memory
+    uv run python -m pathmemory.run live members-4 --break-ui --learn # visible run; successful run is learned
+    uv run python -m pathmemory.run restore-memory                   # undo live learning (back to v1 memory)
 """
 
 import argparse
@@ -23,7 +25,7 @@ from bgym import HighLevelActionSetArgs
 from pathmemory.agent import PathMemoryAgentArgs, write_json
 from pathmemory.config import settings
 from pathmemory.graph import GraphMemory
-from pathmemory.learn import FLAT_STORE, ingest
+from pathmemory.learn import FLAT_STORE, backup_memory, ingest, memory_diff, restore_memory
 from pathmemory.site import seed
 from pathmemory.site.tasks import HIDE_DASHBOARD_REPO_LINKS, TASKS_BY_ID, register_all
 
@@ -97,7 +99,7 @@ def write(rows, path: Path):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("phase", choices=["smoke", "learn", "ingest", "eval", "recovery", "live"])
+    p.add_argument("phase", choices=["smoke", "learn", "ingest", "eval", "recovery", "live", "restore-memory"])
     p.add_argument("tasks", nargs="*")
     p.add_argument("--modes", nargs="+", default=["none", "flat", "graph"])
     p.add_argument("--max-steps", type=int, default=15)
@@ -106,6 +108,7 @@ def main():
     p.add_argument("--mode", default="graph", help="live: memory mode")
     p.add_argument("--break-ui", action="store_true", help="live: hide the dashboard repo links")
     p.add_argument("--live-file", help="live: progress JSON for the demo UI")
+    p.add_argument("--learn", action="store_true", help="live: write the run's verified steps to memory if it succeeds")
     a = p.parse_args()
     register_all()
     out = RESULTS / a.tag
@@ -116,21 +119,36 @@ def main():
             print(json.dumps({k: v for k, v in r.items() if k != "log"}))
         return
 
+    if a.phase == "restore-memory":
+        print(json.dumps(restore_memory(GraphMemory())))
+        return
+
     if a.phase == "live":  # one task in a visible, slowed-down browser; progress streamed to --live-file
         task, live_file = a.tasks[0], a.live_file or str(out / "live.json")
         out.mkdir(parents=True, exist_ok=True)
         write_json(live_file, {"status": "starting", "mode": a.mode, "steps": [], "events": [],
                                "note": "resetting the site" if TASKS_BY_ID[task].kind == "mutate" else "opening browser"})
         agent = PathMemoryAgentArgs(base_args=base_agent_args(demo=True), mode=a.mode, live_file=live_file)
+        graph = GraphMemory() if a.learn else None
+        if graph:
+            backup_memory(graph)
+            before = graph.snapshot()  # taken before the run: graph mode also records failed steps while running
         try:
             r = run_task(task, agent, out / "live", a.max_steps, headless=False, slow_mo=700,
                          ui_break=HIDE_DASHBOARD_REPO_LINKS if a.break_ui else None)
         except Exception as e:  # noqa: BLE001 - shown in the UI
             write_json(live_file, {**json.loads(Path(live_file).read_text()), "status": "error", "note": str(e)[:300]})
             raise
+        memory = None
+        if graph:
+            # Same rule as the experiments: only a successful run becomes memory (both graph and flat store).
+            if r["success"]:
+                ingest([Path(r["exp_dir"])], graph)
+            memory = {**memory_diff(before, graph.snapshot()), "learned": r["success"], "stats": graph.stats()}
         final = json.loads(Path(live_file).read_text())
         write_json(live_file, {**final, "status": "done", "success": r["success"], "tokens": r["input_tokens"],
-                               "seconds": r["seconds"], "dir": str(Path(r["exp_dir"]).relative_to(RESULTS))})
+                               "seconds": r["seconds"], "dir": str(Path(r["exp_dir"]).relative_to(RESULTS)),
+                               "memory": memory})
         print(json.dumps({k: v for k, v in r.items() if k != "log"}))
         return
 
