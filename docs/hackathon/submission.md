@@ -89,6 +89,7 @@ uv run pathmemory-ui                # http://localhost:8795, "Walkthrough" tab
 > single-trajectory replay baseline does not do. Single agent; no multi-agent coordination is claimed.
 
 ## Demo video
-[Watch the finished demo](../media/pathmemory-demo.mp4) (3:00): training runs and edge provenance,
+[Watch the finished demo on YouTube](https://youtu.be/H7FJTGAeLQ4) (3:00): training runs and edge provenance,
 a fresh Cypher query, recorded browser execution of the composed route, and the bridge-removal comparison.
 The [recording plan](demo.md) describes the sequence and verification boundaries.
+The [MP4](../media/pathmemory-demo.mp4) is also included in the repository.

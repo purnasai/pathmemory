@@ -11,7 +11,8 @@ For example, one training run learns **Explore → repository** and another lear
 dashboard link is unavailable. The model chooses the destination and completes the form;
 remembered navigation runs without additional model calls.
 
-[Watch the three-minute demo](docs/media/pathmemory-demo.mp4) ·
+[Watch the three-minute demo](https://youtu.be/H7FJTGAeLQ4) ·
+[Download the MP4](docs/media/pathmemory-demo.mp4) ·
 [Run the walkthrough without an API key](#quick-start) ·
 [Inspect the recorded evidence](docs/evaluation.md)
 
