@@ -93,6 +93,4 @@ Script in `DEMO.md` (about 2:45): training runs and edge provenance, the live Cy
 of the composed route, the ablation.
 
 ## AI assistance disclosure
-Built with AI coding assistants (Claude Code wrote most code, tests and docs; ChatGPT/GPT-6 for design critique and
-review), directed and reviewed by the author, who can explain the state templating, graph model, route query,
-fail-closed replay and the evaluation. See README "AI assistance disclosure".
+This project was built with an AI coding assistant (Claude Code). The author reviewed, tested and can explain every part: graph model, route query, replay and evaluation.

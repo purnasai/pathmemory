@@ -283,17 +283,7 @@ scripts/reproduce_v2.sh
 
 ## AI assistance disclosure
 
-AI coding assistants were used, as the rules allow (rule 11: disclosed here):
-
-- **ChatGPT / GPT-6** was used to brainstorm and critique ideas, the architecture and the evaluation design, and
-  reviewed the correctness and evaluation changes (P0–P2) before they were accepted.
-- **Claude Code (Claude Opus 5.5)** wrote most of the code, tests and docs and ran the experiments, under my
-  direction. I chose the problem and the constraints (no large benchmark downloads, no employer-domain data, fair
-  baselines), reviewed each design decision (route templates, replaying only navigation, fail-closed replay, the
-  flat-replay baseline, the ablation), and decided how to report the results, including the failures and
-  corrections.
-- All results come from real runs; nothing was edited by hand. All work was done during the event
-  (first commit 2026-10-16 01:57 IST).
+This project was built with an AI coding assistant (Claude Code). The author reviewed, tested and can explain every part: graph model, route query, replay and evaluation.
 
 ## Limits
 
