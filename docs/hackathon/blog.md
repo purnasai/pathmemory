@@ -2,7 +2,7 @@
 
 *How I built PathMemory, a FalkorDB memory for browser agents, for Graph Hacks 2026. It covers the first version, the audit that found its numbers were wrong, and the rebuild that held up.*
 
-*Built for Graph Hacks 2026, organised by WeMakeDevs and FalkorDB.*
+*Built for Graph Hacks 2026, organised by WeMakeDevs and FalkorDB. Published on [Medium](https://purnasaigudikandula.medium.com/the-day-my-browser-agent-lost-a-link-and-a-graph-found-another-way-49c22b8b8b69).*
 
 - 🎥 Demo (3 min): https://youtu.be/H7FJTGAeLQ4
 - 💻 Code and reproducible evidence: https://github.com/purnasai/pathmemory

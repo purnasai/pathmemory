@@ -97,4 +97,5 @@ The [MP4](../media/pathmemory-demo.mp4) is also included in the repository.
 ## Blog
 [The Day My Browser Agent Lost a Link, and a Graph Found Another Way](blog.md): the build story from the
 first commit through the v1 audit (three claims found wrong) to the v2 composition experiment, with results and limits.
+Published on Medium: https://purnasaigudikandula.medium.com/the-day-my-browser-agent-lost-a-link-and-a-graph-found-another-way-49c22b8b8b69
 

@@ -15,7 +15,7 @@ remembered navigation runs without additional model calls.
 [Download the MP4](docs/media/pathmemory-demo.mp4) ·
 [Run the walkthrough without an API key](#quick-start) ·
 [Inspect the recorded evidence](docs/evaluation.md) ·
-[Read the build story](docs/hackathon/blog.md)
+[Read the build story on Medium](https://purnasaigudikandula.medium.com/the-day-my-browser-agent-lost-a-link-and-a-graph-found-another-way-49c22b8b8b69)
 
 ![Guided walkthrough in the demo UI](docs/ui_v2_composition.png)
 
