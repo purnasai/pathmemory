@@ -29,9 +29,13 @@ makes prompts bigger without saving work.
 1. **Choose (1 LLM call):** given the goal and the list of known pages (+ what past tasks did there), pick the
    destination template and the bindings (`owner`, `repo`).
 2. **Route (Cypher):** shortest verified path from the current page to that template.
-3. **Replay (no LLM):** for each edge, find the element by role + name + scope on the live page, click it.
-4. **Verify:** the next page must match the expected template. If not, or the element is missing → the edge is
-   banned for this run, its `failures` incremented, and FalkorDB is asked for another route (max 2 reroutes).
+3. **Replay (no LLM):** for each edge, find the one visible element with that role + name inside the remembered
+   landmark, and click it. Hidden, out-of-landmark or ambiguous matches (same name, different link) are never
+   clicked. A prerequisite click (e.g. opening a menu) is skipped only if the target it opens is already clickable.
+4. **Verify:** the next page must match the expected template and the chosen entities (owner/repo/org). If not, or
+   no safe element exists, the edge is banned for this run and FalkorDB is asked for another route (max 2
+   reroutes; never from a page about the wrong entity). Its `failures` counter is written only by live learning
+   (`run live --learn`), never during evaluation.
 5. **Hand over:** the LLM gets a note ("memory replayed navigation to <exact URL>; past tasks here did …") and does
    the real work (fill forms, press buttons). Replayed steps are written into the base agent's history so its
    prompt stays consistent.

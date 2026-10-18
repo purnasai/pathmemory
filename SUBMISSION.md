@@ -25,6 +25,8 @@ pieces of different runs. When the UI changes, a remembered trajectory breaks en
 All tables were recomputed on 2026-10-18 from the committed logs in `docs/evidence/`. Same agent (AgentLab
 GenericAgent), same model (`gpt-6-luna`), same prompts, actions and 15-step budget in every mode.
 
+> **Correction (2026-10-18, branch `p0-correctness`):** the "LLM calls" columns below count LLM-chosen browser steps, not model calls. Counting the destination chooser and parse retries, graph mode made **more** model calls than no memory on the normal UI (4.64 vs 4.21 per task); the input-token savings stand. `repos-5` was run twice with different goals. v1 evaluation also wrote failure counts to its own memory and did not reset the site before read-only tasks. Details and corrected numbers: [docs/evidence/v1-derived/CORRECTIONS.md](docs/evidence/v1-derived/CORRECTIONS.md).
+
 **Normal UI, 14 held-out tasks:**
 
 | Mode | Success | Avg LLM calls | Avg input tokens |
@@ -78,9 +80,9 @@ uv sync && uv run playwright install chromium
 docker compose up -d && uv run python -m pathmemory.site.seed --reset
 uv run pytest -q                # 12 tests
 # recompute the published tables from the committed logs (no LLM needed):
-uv run python -m pathmemory.report docs/evidence/v1/eval.jsonl
-uv run python -m pathmemory.report docs/evidence/v1/recovery.jsonl
-uv run python -m pathmemory.report docs/evidence/v1-repaired/recovery.jsonl
+uv run python -m pathmemory.report docs/evidence/v1/eval.jsonl --select both
+uv run python -m pathmemory.report docs/evidence/v1/recovery.jsonl --select both
+uv run python -m pathmemory.report docs/evidence/v1-repaired/recovery.jsonl --select both
 # full re-run with the LLM (~1 h; numbers vary run to run): see README "Quick start"
 uv run pathmemory-ui            # http://localhost:8795
 ```

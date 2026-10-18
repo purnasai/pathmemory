@@ -1,0 +1,17 @@
+{
+ "replayed_clicks": 63,
+ "outcomes": {
+  "same_target": 63
+ },
+ "notable": [
+  {
+   "run": "v1/eval/2026-10-16_02-31-23_PathMemory-graph_on_pathmemory.repos-5_0",
+   "step": "step_0.pkl.gz",
+   "role": "link",
+   "name": "primer/design",
+   "scope": "main:byteblaze - Dashboard",
+   "outcome": "same_target",
+   "candidates": 2
+  }
+ ]
+}

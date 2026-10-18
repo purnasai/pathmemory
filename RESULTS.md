@@ -1,5 +1,7 @@
 # PathMemory — results (v1, 2026-10-16)
 
+> **Correction (2026-10-18, branch `p0-correctness`):** the "LLM calls" columns below count LLM-chosen browser steps, not model calls. Counting the destination chooser and parse retries, graph mode made **more** model calls than no memory on the normal UI (4.64 vs 4.21 per task); the input-token savings stand. `repos-5` was run twice with different goals. v1 evaluation also wrote failure counts to its own memory and did not reset the site before read-only tasks. Details and corrected numbers: [docs/evidence/v1-derived/CORRECTIONS.md](docs/evidence/v1-derived/CORRECTIONS.md).
+
 Same agent (AgentLab GenericAgent), same model (`gpt-6-luna`), same prompts, action set (`chat` + `bid`, no `goto`)
 and 15-step budget in every mode. Only the memory differs:
 
@@ -96,5 +98,5 @@ uv run python -m pathmemory.run learn explore-1 explore-2 --keep --tag v1-alt
 uv run python -m pathmemory.run recovery --tag v1                    # UI break, before repair
 # rebuild memory with the repair episode (see learn.ingest), then:
 uv run python -m pathmemory.run recovery members-4 issues-2 issues-5 repos-3 --modes flat graph --tag v1-repaired
-uv run python -m pathmemory.report results/v1/eval.jsonl
+uv run python -m pathmemory.report results/v1/eval.jsonl --select both
 ```

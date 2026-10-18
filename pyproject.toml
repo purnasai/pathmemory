@@ -21,3 +21,10 @@ pathmemory-mcp = "pathmemory.mcp_server:main"
 [build-system]
 requires = ["uv_build>=0.12.8,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: needs local containers (FalkorDB and/or Gitea)",
+    "falkordb: needs the FalkorDB container",
+    "gitea: needs the Gitea container (the reset test recreates it)",
+]

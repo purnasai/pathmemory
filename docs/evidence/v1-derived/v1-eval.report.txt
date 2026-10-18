@@ -1,0 +1,56 @@
+45 observations, 42 (task, mode) pairs, 3 pairs with more than one attempt
+
+--- attempt selection: first ---
+mode     success  steps LLM steps replayed model calls in tokens    sec
+none     13/14      4.1       4.1      0.0         n/a     14095   21.1
+flat     13/14      4.3       4.3      0.0         n/a     16624   20.9
+graph    12/14      5.3       3.5      1.8         n/a     10344   24.1
+
+task                     none              flat             graph
+members-2       OK  6st  6llm     OK  6st  6llm     OK  6st  3llm
+members-3       OK  4st  4llm     OK  4st  4llm     OK  4st  1llm
+members-4       OK  6st  6llm     OK  6st  6llm     OK  6st  3llm
+issues-2        OK  8st  8llm     OK  8st  8llm     OK  8st  5llm
+issues-4        OK  3st  3llm     OK  5st  5llm     OK  5st  3llm
+issues-5        OK  4st  4llm     OK  4st  4llm     OK  4st  2llm
+issues-6        OK  1st  1llm     OK  1st  1llm     OK  3st  1llm
+issues-7        OK  2st  2llm     OK  2st  2llm     OK  3st  1llm
+profile-2       OK  5st  5llm     OK  5st  5llm     OK  5st  3llm
+profile-4       OK  4st  4llm     OK  4st  4llm     OK  4st  4llm
+repos-2         OK  4st  4llm     OK  4st  4llm     OK  4st  3llm
+repos-3         OK  4st  4llm     OK  4st  4llm     X  15st 14llm
+repos-5         X   2st  2llm     X   2st  2llm     X   2st  1llm
+social-2        OK  5st  5llm     OK  5st  5llm     OK  5st  5llm
+
+--- attempt selection: latest ---
+mode     success  steps LLM steps replayed model calls in tokens    sec
+none     14/14      4.1       4.1      0.0         n/a     13879   21.4
+flat     14/14      4.3       4.3      0.0         n/a     16612   21.0
+graph    13/14      5.3       3.5      1.8         n/a     10332   24.0
+
+task                     none              flat             graph
+members-2       OK  6st  6llm     OK  6st  6llm     OK  6st  3llm
+members-3       OK  4st  4llm     OK  4st  4llm     OK  4st  1llm
+members-4       OK  6st  6llm     OK  6st  6llm     OK  6st  3llm
+issues-2        OK  8st  8llm     OK  8st  8llm     OK  8st  5llm
+issues-4        OK  3st  3llm     OK  5st  5llm     OK  5st  3llm
+issues-5        OK  4st  4llm     OK  4st  4llm     OK  4st  2llm
+issues-6        OK  1st  1llm     OK  1st  1llm     OK  3st  1llm
+issues-7        OK  2st  2llm     OK  2st  2llm     OK  3st  1llm
+profile-2       OK  5st  5llm     OK  5st  5llm     OK  5st  3llm
+profile-4       OK  4st  4llm     OK  4st  4llm     OK  4st  4llm
+repos-2         OK  4st  4llm     OK  4st  4llm     OK  4st  3llm
+repos-3         OK  4st  4llm     OK  4st  4llm     X  15st 14llm
+repos-5         OK  2st  2llm     OK  2st  2llm     OK  2st  1llm
+social-2        OK  5st  5llm     OK  5st  5llm     OK  5st  5llm
+
+--- repeated attempts (all observations kept) ---
+repos-5 / none: TASK DEFINITION CHANGED between attempts
+   attempt 1 (line 37): FAIL 2 steps  goal='How many commits are on the main branch of a11yproject.com? Reply with the number.'
+   attempt 2 (line 43): OK 2 steps  goal='What is the description of the primer/design repository?'
+repos-5 / flat: TASK DEFINITION CHANGED between attempts
+   attempt 1 (line 38): FAIL 2 steps  goal='How many commits are on the main branch of a11yproject.com? Reply with the number.'
+   attempt 2 (line 44): OK 2 steps  goal='What is the description of the primer/design repository?'
+repos-5 / graph: TASK DEFINITION CHANGED between attempts
+   attempt 1 (line 39): FAIL 2 steps  goal='How many commits are on the main branch of a11yproject.com? Reply with the number.'
+   attempt 2 (line 45): OK 2 steps  goal='What is the description of the primer/design repository?'

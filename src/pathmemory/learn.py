@@ -78,7 +78,7 @@ def trajectory(exp_dir: Path) -> dict | None:
             continue
         src, dst = state_of(a.obs), state_of(b.obs)
         bindings = {**src.bindings, **dst.bindings}
-        step = semantic_step(a.action, a.obs, bindings)
+        step = semantic_step(a.action, a.obs, bindings, scope_bindings=src.bindings)
         rows.append({"src": src, "dst": dst, "step": step, "ok": not b.obs.get("last_action_error"),
                      "url": a.obs["url"], "raw": a.action,
                      "raw_text": semantic_step(a.action, a.obs, {}).text()})

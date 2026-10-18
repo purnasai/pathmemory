@@ -10,6 +10,7 @@ stitched together from edges that were learned in different tasks.
 """
 
 import hashlib
+import json
 
 from falkordb import FalkorDB
 
@@ -18,7 +19,9 @@ from pathmemory.state import State, Step
 
 
 def edge_id(src: str, step: Step, dst: str) -> str:
-    return hashlib.sha1(f"{src}|{step.kind}|{step.role}|{step.name}|{dst}".encode()).hexdigest()[:12]
+    """Identity of a semantic step. The landmark scope is part of it: "Settings" in the repo header and
+    "Settings" in the user menu are different actions even when they land on the same page template."""
+    return hashlib.sha1(f"{src}|{step.kind}|{step.role}|{step.name}|{step.scope}|{dst}".encode()).hexdigest()[:12]
 
 
 class GraphMemory:
@@ -123,6 +126,33 @@ class GraphMemory:
             raise ValueError(f"no backup graph {copy_name!r}")
         self.clear()
         self.db.select_graph(copy_name).copy(self.name)
+
+    def fingerprint(self) -> str:
+        """Content hash of the whole memory (pages, steps with counters, tasks, worksites).
+        Equal fingerprints = the agent sees exactly the same memory."""
+        rows = [
+            *(["S", k, r, t] for k, r, t in self.q("MATCH (s:State) RETURN s.key, s.route, s.title")),
+            *(["E", *row] for row in self.q(
+                "MATCH (a:State)-[r:ACT]->(b:State) RETURN a.key, r.eid, r.kind, r.role, r.name, r.scope, r.pre, "
+                "r.successes, r.failures, b.key")),
+            *(["W", *row] for row in self.q(
+                "MATCH (t:Task)-[w:WORKED_AT]->(s:State) RETURN t.id, t.goal, t.cluster, w.steps, s.key")),
+        ]
+        blob = json.dumps(sorted(rows, key=json.dumps), sort_keys=True)
+        return hashlib.sha256(blob.encode()).hexdigest()[:16]
+
+    def migrate_edge_ids(self) -> int:
+        """Recompute every edge id with the current edge_id() (v1 ids did not include the scope).
+        v1 ids were coarser, so each edge maps to exactly one new id; nothing is merged or split."""
+        rows = self.q("MATCH (a:State)-[r:ACT]->(b:State) RETURN r.eid, a.key, r.kind, r.role, r.name, r.scope, b.key")
+        changed = 0
+        for eid, src, kind, role, name, scope, dst in rows:
+            new = edge_id(src, Step(kind, role, name, scope=scope or ""), dst)
+            if new != eid:
+                self.q("MATCH (:State {key:$src})-[r:ACT {eid:$eid}]->(:State {key:$dst}) SET r.eid=$new",
+                       src=src, dst=dst, eid=eid, new=new)
+                changed += 1
+        return changed
 
     def stats(self) -> dict:
         n = self.q("MATCH (s:State) RETURN count(s)")[0][0]

@@ -254,11 +254,12 @@ function esc(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', 
 function renderResults() {
   $('#results').innerHTML = EXPS.map((e, ei) => {
     const s = e.summary;
-    const head = `<tr><th>mode</th><th>success</th><th>avg steps</th><th>LLM calls</th><th>replayed</th><th>input tokens</th><th>seconds</th></tr>`;
-    const rows = Object.entries(s).map(([m, v]) => `<tr><td>${m}</td><td>${v.success}/${v.tasks}</td><td>${v.steps}</td><td>${v.llm_calls}</td><td>${v.replayed}</td><td>${v.input_tokens.toLocaleString()}</td><td>${v.seconds}</td></tr>`).join('');
+    const head = `<tr><th>mode</th><th>success</th><th>avg steps</th><th>LLM-chosen steps</th><th>replayed</th><th>input tokens</th><th>seconds</th></tr>`;
+    const rows = Object.entries(s).map(([m, v]) => `<tr><td>${m}</td><td>${v.success}/${v.tasks}</td><td>${v.steps}</td><td>${v.llm_steps}</td><td>${v.replayed}</td><td>${v.input_tokens.toLocaleString()}</td><td>${v.seconds}</td></tr>`).join('');
     const modes = Object.keys(s);
     const per = Object.entries(e.tasks).map(([t, r]) => `<tr><td>${t}</td>${modes.map(m => r[m] ? `<td class="cell" data-e="${ei}" data-t="${t}" data-m="${m}"><span class="${r[m].success ? 'ok' : 'bad'}">${r[m].success ? '✓' : '✗'}</span> ${r[m].steps} st · ${(r[m].input_tokens / 1000).toFixed(1)}k</td>` : '<td>–</td>').join('')}</tr>`).join('');
-    return `<h3>${e.title}</h3><table>${head}${rows}</table>
+    const rep = e.repeated.length ? `<p class="muted">${e.observations} runs; ${e.repeated.length} task/mode pairs were run more than once (${e.repeated.map(d => d.task + '/' + d.mode).join(', ')}). Showing the ${e.selection} attempt; <code>python -m pathmemory.report --select both</code> shows all.</p>` : '';
+    return `<h3>${e.title}</h3>${rep}<table>${head}${rows}</table>
       <table><tr><th>task</th>${modes.map(m => `<th>${m}</th>`).join('')}</tr>${per}</table>`;
   }).join('') + `<p class="muted">Same agent, model, prompts and 15-step budget in every mode; only the memory differs. Click a cell to replay that run.</p>`;
   document.querySelectorAll('td.cell').forEach(td => td.onclick = () => {

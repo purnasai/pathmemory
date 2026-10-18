@@ -29,6 +29,8 @@ LLM adds the collaborator.*
 
 ## Results (local Gitea, `gpt-6-luna`, same agent/prompt/budget in every mode)
 
+> **Correction (2026-10-18, branch `p0-correctness`):** the "LLM calls" columns below count LLM-chosen browser steps, not model calls. Counting the destination chooser and parse retries, graph mode made **more** model calls than no memory on the normal UI (4.64 vs 4.21 per task); the input-token savings stand. `repos-5` was run twice with different goals. v1 evaluation also wrote failure counts to its own memory and did not reset the site before read-only tasks. Details and corrected numbers: [docs/evidence/v1-derived/CORRECTIONS.md](docs/evidence/v1-derived/CORRECTIONS.md).
+
 | Experiment | No memory | Flat memory (top-3 past trajectories in prompt) | **PathMemory (graph)** |
 |---|---|---|---|
 | Normal UI, 14 held-out tasks — success | 14/14 | 14/14 | 13/14 |
@@ -140,7 +142,7 @@ uv run python -m pathmemory.run recovery --tag v1                    # dashboard
 uv run python -m pathmemory.run ingest results/v1/learn/* results/v1-alt/learn/* \
     results/v1/recovery/*PathMemory-none_on_pathmemory.members-2_0
 uv run python -m pathmemory.run recovery members-4 issues-2 issues-5 repos-3 --modes flat graph --tag v1-repaired
-uv run python -m pathmemory.report results/v1/eval.jsonl
+uv run python -m pathmemory.report results/v1/eval.jsonl --select both
 ```
 
 The demo UI reads `results/`, which is not committed (screenshots and step logs are large); run the experiments
@@ -194,9 +196,9 @@ The run logs behind every table are committed in `docs/evidence/` (JSONL summari
 stay in the git-ignored `results/`). Recompute any table without re-running the agent:
 
 ```bash
-uv run python -m pathmemory.report docs/evidence/v1/eval.jsonl              # normal UI, 14 tasks x 3 modes
-uv run python -m pathmemory.report docs/evidence/v1/recovery.jsonl          # UI break, before repair
-uv run python -m pathmemory.report docs/evidence/v1-repaired/recovery.jsonl # UI break, after one repair episode
+uv run python -m pathmemory.report docs/evidence/v1/eval.jsonl --select both  # normal UI, 14 tasks x 3 modes
+uv run python -m pathmemory.report docs/evidence/v1/recovery.jsonl --select both  # UI break, before repair
+uv run python -m pathmemory.report docs/evidence/v1-repaired/recovery.jsonl --select both # UI break, after one repair episode
 ```
 
 Re-running the experiments with the LLM gives different numbers run to run (`gpt-6-luna` only accepts

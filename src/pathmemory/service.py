@@ -11,7 +11,7 @@ from pathlib import Path
 
 from pathmemory.config import settings
 from pathmemory.graph import GraphMemory
-from pathmemory.report import load, summarize
+from pathmemory.report import duplicates, load_rows, rel_run_dir, select, summarize
 from pathmemory.state import Step, route_template, semantic_step, state_of
 
 RESULTS = settings.root / "results"
@@ -28,6 +28,8 @@ EXPERIMENTS = [
     ("v1/recovery.jsonl", "UI break — before any repair is learned"),
     ("v1-repaired/recovery.jsonl", "UI break — after learning from one repair episode"),
 ]
+# The published v1 tables used the latest attempt of a repeated (task, mode); the UI says so and lists the others.
+EXPERIMENT_SELECTION = "latest"
 
 
 class InvalidArgument(ValueError):
@@ -97,8 +99,10 @@ class PathMemoryService:
         for rel, title in EXPERIMENTS:
             p = RESULTS / rel
             if p.exists():
-                by = load(p)
-                out.append({"file": rel, "title": title, "summary": summarize(by),
+                rows = load_rows(p)
+                by = select(rows, EXPERIMENT_SELECTION)
+                out.append({"file": rel, "title": title, "selection": EXPERIMENT_SELECTION, "summary": summarize(by),
+                            "observations": len(rows), "repeated": duplicates(rows),
                             "tasks": {t: {m: _row(r) for m, r in modes.items()} for t, modes in by.items()}})
         return out
 
@@ -109,13 +113,9 @@ class PathMemoryService:
 
 def _row(r):
     return {k: r[k] for k in ("success", "steps", "llm_steps", "replayed_steps", "input_tokens", "seconds")} | {
-        "exp_dir": _rel(r["exp_dir"])}
+        "exp_dir": rel_run_dir(r["exp_dir"])}
 
 
-def _rel(exp_dir: str) -> str:
-    """Saved rows hold absolute paths from wherever the run happened; keep the part under results/."""
-    parts = Path(exp_dir).parts
-    return str(Path(*parts[len(parts) - parts[::-1].index("results"):]))
 
 
 def _safe_dir(exp_dir: str) -> Path:

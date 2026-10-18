@@ -4,6 +4,10 @@ from pathmemory.graph import GraphMemory
 from pathmemory.learn import memory_diff
 from pathmemory.state import State, Step
 
+import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.falkordb]
+
 GRAPH, COPY = "pm_test_live", "pm_test_live_backup"
 HOME, REPO, EXPLORE = State("/", "/"), State("/:owner/:repo", "/:owner/:repo"), State("/explore/repos", "/explore/repos")
 

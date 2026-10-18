@@ -175,25 +175,72 @@ class Step:
         return f"{self.kind}{target}{value}"
 
 
-def semantic_step(action: str, obs_before, bindings: dict) -> Step:
+def semantic_step(action: str, obs_before, bindings: dict, scope_bindings: dict | None = None) -> Step:
+    """bindings template the target's name (it may name the destination, e.g. link "{repo}");
+    scope_bindings template the landmark, which belongs to the page the click is made on. They differ when
+    learning: the dashboard landmark "main:byteblaze - Dashboard" names the logged-in user, not the repo owner."""
     kind, args = parse_action(action)
     if kind in ("click", "fill", "select_option", "hover", "dblclick", "check", "uncheck") and args:
         node = node_by_bid(obs_before, args[0])
         role, name = (_role(node), _name(node)) if node else ("", "")
         value = args[1] if kind in ("fill", "select_option") and len(args) > 1 else ""
-        scope = templatize(scope_of(obs_before, node), bindings) if node else ""
+        scope = templatize(scope_of(obs_before, node), bindings if scope_bindings is None else scope_bindings) if node else ""
         return Step(kind, role, templatize(norm_name(name), bindings)[:120], templatize(value, bindings)[:120], scope)
     return Step(kind, value=(args[0][:120] if args else ""))
 
 
-def find_target(obs, role: str, name: str, scope: str = "") -> str | None:
-    """bid of the first visible element with this role and name, preferring the remembered landmark."""
-    props = obs.get("extra_element_properties", {})
+@dataclass(frozen=True)
+class Match:
+    """Result of looking up a remembered target on the current page.
+
+    status: ok | missing | hidden | out_of_scope | ambiguous. Only "ok" carries a bid; replay never guesses.
+    """
+
+    status: str
+    bid: str | None = None
+    candidates: int = 0
+
+    @property
+    def ok(self) -> bool:
+        return self.status == "ok"
+
+
+def hrefs(obs) -> dict[str, str]:
+    """bid -> href from the DOM snapshot (the accessibility tree does not carry link targets)."""
+    dom = obs.get("dom_object") or {}
+    strings = dom.get("strings") or []
+    out = {}
+    for doc in dom.get("documents") or []:
+        for attrs in (doc.get("nodes") or {}).get("attributes") or []:
+            a = {strings[attrs[i]]: strings[attrs[i + 1]] for i in range(0, len(attrs) - 1, 2)}
+            if "bid" in a and a.get("href"):
+                out[a["bid"]] = a["href"]
+    return out
+
+
+def find_target(obs, role: str, name: str, scope: str = "") -> Match:
+    """Find the one visible element with this role and name inside the remembered landmark, or say why not.
+
+    Fails closed: an element without visibility data counts as hidden, a remembered scope that matches no
+    candidate is not widened to other landmarks, and several matches are accepted only when they are the
+    same link (identical href), e.g. a repo listed twice on the dashboard.
+    """
+    props = obs.get("extra_element_properties") or {}
     want = norm_name(name).lower()
     nodes = [n for n in _nodes(obs)
              if n.get("browsergym_id") and _role(n) == role and norm_name(_name(n)).lower() == want]
-    if scope and len(nodes) > 1:
-        nodes = [n for n in nodes if scope_of(obs, n).lower() == scope.lower()] or nodes
-    hits = [n["browsergym_id"] for n in nodes]
-    visible = [b for b in hits if (props.get(b) or {}).get("visibility", 1) > 0.5]
-    return (visible or hits or [None])[0]
+    if not nodes:
+        return Match("missing")
+    if scope:
+        in_scope = [n for n in nodes if scope_of(obs, n).lower() == scope.lower()]
+        if not in_scope:
+            return Match("out_of_scope", candidates=len(nodes))
+        nodes = in_scope
+    visible = [n["browsergym_id"] for n in nodes if (props.get(n["browsergym_id"]) or {}).get("visibility", 0) > 0.5]
+    if not visible:
+        return Match("hidden", candidates=len(nodes))
+    if len(visible) > 1:
+        targets = {hrefs(obs).get(b) for b in visible}
+        if len(targets) != 1 or None in targets:
+            return Match("ambiguous", candidates=len(visible))
+    return Match("ok", visible[0], len(visible))

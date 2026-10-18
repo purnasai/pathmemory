@@ -4,6 +4,8 @@ Reset = recreate the container (its /data is tmpfs), then run this again.
 """
 
 import base64
+import hashlib
+import json
 import subprocess
 import time
 
@@ -127,6 +129,29 @@ def reset():
     subprocess.run(["docker", "compose", "up", "-d", "--force-recreate", "gitea"], cwd=settings.root,
                    check=True, capture_output=True)
     seed()
+
+
+def state() -> dict:
+    """Everything a task checks or reads, from the API (not the UI's cached counters)."""
+    repos = {}
+    for r in sorted(api("GET", "/repos/search?limit=50")["data"], key=lambda r: r["full_name"]):
+        full = r["full_name"]
+        repos[full] = {
+            "private": r["private"], "fork": r["fork"], "description": r["description"],
+            "collaborators": sorted(c["login"] for c in api("GET", f"/repos/{full}/collaborators") or []),
+            "issues": sorted([i["title"], i["state"], sorted(a["login"] for a in i.get("assignees") or []),
+                              sorted(l["name"] for l in i.get("labels") or [])]
+                             for i in api("GET", f"/repos/{full}/issues?state=all&type=issues&limit=50") or []),
+            "milestones": sorted(m["title"] for m in api("GET", f"/repos/{full}/milestones?state=all") or []),
+        }
+    me = api("GET", "/user")
+    return {"repos": repos, "user": {"full_name": me["full_name"], "website": me["website"]},
+            "starred": sorted(r["full_name"] for r in api("GET", "/user/starred") or []),
+            "following": sorted(u["login"] for u in api("GET", "/user/following") or [])}
+
+
+def fingerprint() -> str:
+    return hashlib.sha256(json.dumps(state(), sort_keys=True).encode()).hexdigest()[:16]
 
 
 if __name__ == "__main__":

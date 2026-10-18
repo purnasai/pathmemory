@@ -11,6 +11,10 @@ from mcp.client.stdio import stdio_client
 from pathmemory.graph import GraphMemory
 from pathmemory.state import State, Step
 
+import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.falkordb]
+
 GRAPH = "pm_test_mcp"
 
 

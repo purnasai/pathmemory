@@ -2,7 +2,7 @@
 
     uv run python -m pathmemory.run smoke profile-3 members-1        # base agent on given tasks
     uv run python -m pathmemory.run learn                            # TRAIN tasks -> build memory
-    uv run python -m pathmemory.run eval --modes none flat graph     # TEST tasks, frozen memory
+    uv run python -m pathmemory.run eval --modes none flat graph     # TEST tasks, frozen memory snapshot
     uv run python -m pathmemory.run ingest results/x/learn/* --keep  # add saved runs to memory
     uv run python -m pathmemory.run live members-4 --break-ui --learn # visible run; successful run is learned
     uv run python -m pathmemory.run restore-memory                   # undo live learning (back to v1 memory)
@@ -10,8 +10,10 @@
 
 import argparse
 import gzip
+import hashlib
 import json
 import pickle
+import shutil
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -56,19 +58,74 @@ def base_agent_args(demo: bool = False) -> GenericAgentArgs:
     return GenericAgentArgs(chat_model_args=model, flags=flags)
 
 
-def agent_args(mode: str):
-    return PathMemoryAgentArgs(base_args=base_agent_args(), mode=mode)
+# Evaluation never touches the memory it is scored against: before every graph-mode trial the
+# designated snapshot is copied into this working graph, and the agent only reads it.
+EVAL_WORK_GRAPH = "pathmemory_eval_work"
+ROW_SCHEMA = 2
 
 
-def run_task(task_id: str, agent, out_dir: Path, max_steps=15, ui_break=None, headless=True, slow_mo=None) -> dict:
-    if TASKS_BY_ID[task_id].kind == "mutate":
-        seed.reset()
+def agent_args(mode: str, **kw):
+    return PathMemoryAgentArgs(base_args=base_agent_args(), mode=mode, **kw)
+
+
+def task_sha(task_id: str) -> str:
+    """Fingerprint of a task definition (goal and checker), so two runs under one id but different
+    definitions are never pooled silently."""
+    s = TASKS_BY_ID[task_id]
+    cells = [repr(c.cell_contents) for c in (getattr(s.check, "__closure__", None) or [])]
+    blob = json.dumps([s.goal, s.kind, s.answer, s.url_pattern, getattr(s.check, "__qualname__", None), cells])
+    return hashlib.sha256(blob.encode()).hexdigest()[:12]
+
+
+def file_sha(path) -> str | None:
+    path = Path(path)
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16] if path.exists() else None
+
+
+def usage(summary: dict) -> dict:
+    """Model usage from AgentLab's summary. stats.cum_input_tokens is AgentLab's own episode total (its tracker
+    sees every completion, chooser included); the pm_* keys are PathMemory's per-role counts of the same calls."""
+    def cum(k):
+        return int(summary.get(f"stats.cum_{k}") or 0)
+    roles = {r: {k: cum(f"pm_{r}_{k}") for k in ("calls", "api_attempts", "input_tokens", "output_tokens")}
+             for r in ("chooser", "base")}
+    total_in, total_out = cum("input_tokens"), cum("output_tokens")
+    consistent = (roles["chooser"]["input_tokens"] + roles["base"]["input_tokens"] == total_in
+                  and roles["chooser"]["output_tokens"] + roles["base"]["output_tokens"] == total_out)
+    return {
+        "chooser_calls": roles["chooser"]["calls"], "base_calls": roles["base"]["calls"],
+        "model_calls": roles["chooser"]["calls"] + roles["base"]["calls"],
+        "api_attempts": roles["chooser"]["api_attempts"] + roles["base"]["api_attempts"],
+        "input_tokens": total_in, "output_tokens": total_out,
+        "chooser_input_tokens": roles["chooser"]["input_tokens"], "chooser_output_tokens": roles["chooser"]["output_tokens"],
+        "base_input_tokens": roles["base"]["input_tokens"], "base_output_tokens": roles["base"]["output_tokens"],
+        "accounting_consistent": consistent,
+        "agent_seconds": round(float(summary.get("stats.cum_agent_elapsed") or 0), 1),
+        "env_seconds": round(float(summary.get("stats.cum_step_elapsed") or 0), 1),
+    }
+
+
+def reset_site(expected: str | None = None) -> str:
+    """Fresh Gitea fixture; raises if it does not match the fixture the batch started from."""
+    seed.reset()
+    fp = seed.fingerprint()
+    if expected and fp != expected:
+        raise RuntimeError(f"Gitea fixture after reset is {fp}, expected {expected}: refusing to run on drifted state")
+    return fp
+
+
+def run_task(task_id: str, agent, out_dir: Path, max_steps=15, ui_break=None, headless=True, slow_mo=None,
+             reset: bool | None = None, fixture: str | None = None) -> dict:
+    """reset=None keeps the demo behaviour (reset only before data-changing tasks); experiments pass True."""
+    if reset or (reset is None and TASKS_BY_ID[task_id].kind == "mutate"):
+        fixture = reset_site(fixture)
     env_args = EnvArgs(task_name=f"pathmemory.{task_id}", task_seed=0, max_steps=max_steps, headless=headless,
                        slow_mo=slow_mo, task_kwargs={"ui_break": ui_break} if ui_break else None)
     exp = ExpArgs(agent_args=agent, env_args=env_args)
     exp.prepare(out_dir)
     t0 = time.time()
     exp.run()
+    seconds = round(time.time() - t0, 1)
     d = Path(exp.exp_dir)
     summary = json.loads((d / "summary_info.json").read_text())
     log, sources = [], {"llm": 0, "graph": 0}
@@ -79,13 +136,16 @@ def run_task(task_id: str, agent, out_dir: Path, max_steps=15, ui_break=None, he
             sources[pm["source"]] += 1
             log = pm.get("log", log)
     return {
-        "task": task_id, "mode": getattr(agent, "mode", "none"),
+        "schema": ROW_SCHEMA, "task": task_id, "task_sha": task_sha(task_id), "goal": TASKS_BY_ID[task_id].goal,
+        "mode": getattr(agent, "mode", "none"),
         "success": summary.get("cum_reward", 0) > 0, "steps": summary.get("n_steps"),
+        # browser steps by who chose the action; model calls are counted separately (chooser + base, incl. retries)
         "llm_steps": sources["llm"], "replayed_steps": sources["graph"],
-        "input_tokens": summary.get("stats.cum_input_tokens", 0), "output_tokens": summary.get("stats.cum_output_tokens", 0),
-        "seconds": round(time.time() - t0, 1), "err": summary.get("err_msg"),
+        **usage(summary),
+        "seconds": seconds, "err": summary.get("err_msg"),
         "recovered": any(e["event"] == "recovered" for e in log),
         "edge_failures": sum(e["event"] == "edge_failed" for e in log),
+        "fixture": fixture, "started": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t0)),
         "log": log, "exp_dir": str(d),
     }
 
@@ -109,6 +169,8 @@ def main():
     p.add_argument("--break-ui", action="store_true", help="live: hide the dashboard repo links")
     p.add_argument("--live-file", help="live: progress JSON for the demo UI")
     p.add_argument("--learn", action="store_true", help="live: write the run's verified steps to memory if it succeeds")
+    p.add_argument("--snapshot", default="pathmemory",
+                   help="eval/recovery: memory graph to evaluate from; it is copied, never written")
     a = p.parse_args()
     register_all()
     out = RESULTS / a.tag
@@ -128,7 +190,8 @@ def main():
         out.mkdir(parents=True, exist_ok=True)
         write_json(live_file, {"status": "starting", "mode": a.mode, "steps": [], "events": [],
                                "note": "resetting the site" if TASKS_BY_ID[task].kind == "mutate" else "opening browser"})
-        agent = PathMemoryAgentArgs(base_args=base_agent_args(demo=True), mode=a.mode, live_file=live_file)
+        agent = PathMemoryAgentArgs(base_args=base_agent_args(demo=True), mode=a.mode, live_file=live_file,
+                                    record_failures=a.learn)  # memory is written only with --learn
         graph = GraphMemory() if a.learn else None
         if graph:
             backup_memory(graph)
@@ -165,7 +228,9 @@ def main():
         if not a.keep:
             graph.clear()
             FLAT_STORE.unlink(missing_ok=True)
-        rows = [run_task(t, agent_args("none"), out / "learn", a.max_steps) for t in (a.tasks or TRAIN)]
+        fixture = reset_site()
+        rows = [run_task(t, agent_args("none"), out / "learn", a.max_steps, reset=True, fixture=fixture)
+                for t in (a.tasks or TRAIN)]
         write(rows, out / "learn.jsonl")
         print(json.dumps(ingest([Path(r["exp_dir"]) for r in rows], graph)))
         for r in rows:
@@ -173,13 +238,32 @@ def main():
         return
 
     recovery = a.phase == "recovery"
+    # Frozen inputs for the whole batch: graph snapshot (copied per trial), flat store (copied once), site fixture.
+    snapshot = GraphMemory(a.snapshot)
+    snap_fp = snapshot.fingerprint()
+    out.mkdir(parents=True, exist_ok=True)
+    flat_copy = out / "flat_snapshot.json"
+    if FLAT_STORE.exists():
+        shutil.copyfile(FLAT_STORE, flat_copy)
+    fixture = reset_site()
+    work = GraphMemory(EVAL_WORK_GRAPH)
     for t in a.tasks or (RECOVERY if recovery else TEST):
         for mode in a.modes:
-            r = run_task(t, agent_args(mode), out / a.phase, a.max_steps,
-                         ui_break=HIDE_DASHBOARD_REPO_LINKS if recovery else None)
+            work.restore(a.snapshot)
+            before = work.fingerprint()
+            assert before == snap_fp, "working copy differs from the snapshot"
+            r = run_task(t, agent_args(mode, graph_name=EVAL_WORK_GRAPH, flat_store=str(flat_copy)), out / a.phase,
+                         a.max_steps, ui_break=HIDE_DASHBOARD_REPO_LINKS if recovery else None, reset=True,
+                         fixture=fixture)
+            after = work.fingerprint()
+            if snapshot.fingerprint() != snap_fp:
+                raise RuntimeError(f"memory snapshot {a.snapshot!r} changed during evaluation")
+            r["memory"] = {"snapshot": a.snapshot, "fingerprint": snap_fp, "unchanged": after == before,
+                           "flat_store_sha": file_sha(flat_copy)}
             write([r], out / f"{a.phase}.jsonl")
             print(f"{t:10} {mode:5} {'OK  ' if r['success'] else 'FAIL'} steps={r['steps']:>2} "
-                  f"llm={r['llm_steps']:>2} replay={r['replayed_steps']:>2} tok={r['input_tokens']:>6}")
+                  f"llm_steps={r['llm_steps']:>2} replay={r['replayed_steps']:>2} calls={r['model_calls']:>2} "
+                  f"tok={r['input_tokens']:>6}")
 
 
 if __name__ == "__main__":
