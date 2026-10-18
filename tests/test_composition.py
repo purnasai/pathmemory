@@ -94,3 +94,26 @@ def test_build_memory_refuses_held_out_and_redefined_episodes():
         with pytest.raises(ValueError, match="current definition"):
             build_memory([old], g, settings.root / "results/pm_test_flat.json", set(TEST))
     g.clear()
+
+
+def test_flat_prompt_context_audit():
+    """What flat mode's top-3 retrieval gives for issues-2, and that pinning gives exactly the named trajectories."""
+    from pathmemory.agent import flat_context
+    from pathmemory.site.tasks import TASKS_BY_ID
+    store = V2 / "memory/flat_memory.json"
+    goal = TASKS_BY_ID["issues-2"].goal + " When you are done, send me a short message (include the answer if I asked a question)."
+    top = [t["task_id"] for t in flat_context(goal, store_path=store)]  # the goal text the agent ranks with
+    assert top == ["repos-1", "issues-3", "explore-2"]  # neither explore-3 nor issues-1: see FAIR_COMPARISON.md
+    pinned = [t["task_id"] for t in flat_context("x", store_path=store, only=["explore-1", "explore-3", "issues-1"])]
+    assert pinned == ["explore-1", "explore-3", "issues-1"]
+
+
+@pytest.mark.integration
+@pytest.mark.falkordb
+def test_committed_dump_reloads_to_the_manifest_fingerprint():
+    from pathmemory.graph import GraphMemory
+    g = GraphMemory("pm_test_dump")
+    dump = json.loads((V2 / "memory/graph_v2.json").read_text())
+    assert g.load_dump(dump) == dump["fingerprint"] == MANIFEST["fingerprint"]
+    assert [e["eid"] for e in g.edges()] == [e["eid"] for e in MANIFEST["edges"]]
+    g.clear()

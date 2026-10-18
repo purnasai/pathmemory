@@ -1,51 +1,187 @@
 # PathMemory
 
-**FalkorDB procedural memory for browser agents: remember how a website works, reuse it on new tasks,
-and route around steps that break.**
+**FalkorDB procedural memory for browser agents: verified UI steps from separate past runs, composed by a graph
+query into a route no single run took, replayed in a real browser with every page and entity checked.**
 
 Graph Hacks (WeMakeDevs × FalkorDB), October 2026. **Tracks entered: 01 — Agents That Act on Connected Data;
-02 — Agent Memory and Coordination** (procedural memory that persists across tasks and sessions).
+02 — Agent Memory and Coordination.**
 
-Browser agents rediscover the same navigation on every task: open the repo, find Settings, find Collaborators.
-Every one of those clicks is an LLM call. PathMemory stores what the agent has *verified* about a site as a graph
-in FalkorDB and lets later tasks reuse it:
+![v2 composition tab](docs/ui_v2_composition.png)
+*The v2 tab: the route FalkorDB returns when the dashboard link is gone (green), the banned step (red dashed),
+and for each hop the training run that taught it. Gold badges are hops only one run taught.*
 
-- **Pages are templates.** `/byteblaze/dotfiles/settings/collaboration` and `/primer/design/settings/collaboration`
-  are the same node, `/:owner/:repo/settings/collaboration`, so a route learned on one repo works on every repo.
-- **Steps are verified clicks.** An edge exists only if clicking that element (by role + accessible name, e.g.
-  link `Settings`, link `{repo}`) actually led to the next page. Edges count successes and failures.
-- **Routes are graph queries.** A bounded variable-length Cypher match finds the shortest, least-failed path,
-  so a route can combine steps learned in different tasks.
-- **Replay without the LLM, check every page.** Navigation clicks are replayed directly; the page after each click
-  must match the expected template. If a step fails, it is banned for the run, recorded as a failure, and
-  FalkorDB is asked for another route.
-- **The LLM still does the real work.** Memory only replays navigation (links, tabs, menu items). Anything that
-  changes data — filling forms, pressing buttons — is always the LLM's decision.
+## The problem
 
-![Recovery run in the demo UI](docs/ui_recovery.png)
-*A held-out task with the UI broken: the remembered dashboard link is gone (red). FalkorDB reroutes through
-Explore (green), a route verified by one earlier repair run; 4 clicks are replayed with no LLM call, then the
-LLM adds the collaborator.*
+A browser agent re-derives the same navigation on every task: open the repository, find Issues, find New Issue.
+Each of those clicks costs a model call. Agents that keep memory usually keep **trajectories**: whole past runs,
+retrieved by similarity and pasted into the prompt, or replayed as a script.
 
-## Results v2 (2026-10-18): route composition, four modes
+## Why past trajectories alone do not supply a new route
 
-One held-out task (`issues-2`), 5 trials per mode, a demonstration and not a benchmark. Memory built from
-10 named training episodes, none of them a test task. Details: [docs/evidence/v2/FAIR_COMPARISON.md](docs/evidence/v2/FAIR_COMPARISON.md),
-[COMPOSITION.md](docs/evidence/v2/COMPOSITION.md), [DEMO_WALKTHROUGH.md](docs/evidence/v2/DEMO_WALKTHROUGH.md).
+A trajectory is one path from one start to one end. When the page the agent starts from changes (here: the
+dashboard stops showing repository links), the stored trajectory that began with "click the repo on the
+dashboard" is dead, and the knowledge needed to get around it is spread over runs that were about something else.
+In our training memory, one run (`explore-3`) went **dashboard → Explore → a repository**, and another (`issues-1`)
+went **dashboard → repository → Issues → New Issue**. Neither contains **Explore → repository → Issues → New Issue**,
+and no amount of trajectory retrieval produces a run that does not exist.
 
-| Condition | No memory | Flat prompt (top-3) | Flat replay (one trajectory) | **Graph (FalkorDB)** |
-|---|---|---|---|---|
-| Normal UI: success / model calls / input tokens | 5/5 · 8.0 · 22.8k | 5/5 · 8.2 · 26.4k | 5/5 · 6.0 · 14.8k | 5/5 · 6.0 · 14.9k |
-| Dashboard repo links hidden: success / model calls / input tokens | 5/5 · 7.0 · 20.6k | 5/5 · 7.6 · 25.4k | 5/5 · 8.4 · 23.7k | 5/5 · **6.0** · **15.0k** |
-| … memory replay reached the goal page | – | – | 0/5 | **5/5** |
+## How FalkorDB composes the route
 
-- With the dashboard links hidden, graph memory joined steps from two training runs (explore-3: Explore → repo;
-  issues-1: repo → Issues → New Issue) into a route neither contained, and replayed it in 5/5 trials. Flat replay
-  (same chooser, matcher and checks, one trajectory at a time) had no route. Removing the bridge step from a copy
-  of the graph removed the route (0/5 replays).
-- Every mode succeeded every time. The gain is cost: fewer model calls and 27–41% fewer input tokens under the
-  break. On the normal UI flat replay ties graph, and with the links hidden the no-memory agent used fewer browser
-  steps (7 vs 9, via an issue link in the activity feed).
+PathMemory stores what runs *verified*, one step at a time, as a graph:
+
+- **Pages are templates** (`/:owner/:repo/issues`), so a step learned on one repository applies to all of them.
+- **Steps are verified clicks** `(:State)-[:ACT]->(:State)`, identified by element role + accessible name + page
+  landmark, with entity names templated (`link '{repo}'`), success/failure counts, and the **training runs that
+  showed them** (`r.sources`).
+- **A route is a Cypher path query** over all steps from all runs. When a step fails, it is banned for this run and
+  the query is asked again. The answer can join steps from different runs at a shared page template: here
+  `Explore` (explore-1, explore-3) → `{repo}` (explore-3) → `Issues` → `New Issue` (issues-1).
+
+## How the browser verifies actions
+
+Memory only replays navigation (links, tabs, menu items); the LLM makes every data-changing decision. Replay is
+fail-closed:
+
+- a click happens only on **one visible element** with the stored role and name, inside the stored landmark;
+  hidden, out-of-landmark or ambiguous targets (same name, different link) are never clicked;
+- if the link's href already points to a **different owner/repo** than the task needs, it is refused before clicking;
+- after each click the new page must have the **expected template and the chosen owner/repo**;
+- on any failure the step is banned for this run and FalkorDB is asked for another route; with none left, the LLM
+  continues from the current page. Evaluation never writes to memory.
+
+## Why the ablation matters
+
+Removing the one bridge step (`/explore/repos → {repo}`, taught only by explore-3) from a copy of the graph removes
+the composed route: the same query returns nothing and replay falls back to the LLM. That isolates the effect to the
+**graph join**: same chooser, same matcher, same checks, one edge less. A single-trajectory replay baseline with
+the same machinery (flat replay) fails the same way.
+
+## Results (v2, 2026-10-18)
+
+One held-out task (`issues-2`: create an issue in primer/design and assign carol), dashboard repository links
+hidden, `gpt-6-luna`, 5 trials per mode. A focused demonstration, not a benchmark
+([FAIR_COMPARISON.md](docs/evidence/v2/FAIR_COMPARISON.md)).
+
+> **Graph-composed replay reached the target page in 5/5 broken-UI trials; single-trajectory flat replay in 0/5;
+> the graph with the bridge step removed in 0/5.**
+
+| dashboard links hidden | No memory | Flat prompt (top-3) | Flat replay (one trajectory) | **Graph** | Graph, bridge removed |
+|---|---|---|---|---|---|
+| final task checker passed | 5/5 | 5/5 | 5/5 | 5/5 | 5/5 |
+| memory replay reached the target page | – | – | 0/5 | **5/5** | 0/5 |
+| model calls / task (chooser + base, incl. retries) | 7.0 | 7.6 | 8.4 | **6.0** | 8.4 |
+| input tokens / task | 20.6k | 25.4k | 23.7k | **15.0k** | 24.9k |
+| est. USD / task | 0.0023 | 0.0029 | 0.0027 | **0.0017** | 0.0028 |
+| browser actions / task | **7.0** | 7.6 | 7.4 | 9.0 | 7.4 |
+
+- **Every mode passed the checker every time: there is no task-success advantage.** Where the graph differs is
+  that it got there by replay, at lower model cost. No latency advantage (episode times 32.8–36.7 s) and no
+  significance test.
+- **No memory used fewer browser actions.** The break hides only exact `owner/repo` links; the activity feed still
+  links issues (`primer/design#1`), and the LLM went issue page → "New Issue" button in 2 clicks. Memory cannot
+  learn that shortcut (it stores navigation links, and that control is a button), so it replays 4 hops.
+- **Normal UI:** flat replay ties graph (both replay the single issues-1 route; 6.0 calls, $0.0017).
+- **Flat prompt fairness:** its top-3 retrieval did not include explore-3 or issues-1. Pinning exactly the route's
+  three source runs into its prompt did not change its path or cost (7.8 calls; still the feed shortcut).
+- Cost: litellm 1.80.0 list price for `gpt-6-luna` ($0.10 / 1M input, $0.50 / 1M output), no cache discount.
+
+Evidence: [COMPOSITION.md](docs/evidence/v2/COMPOSITION.md) (episodes, route, per-hop sources, Cypher result,
+absence from every single run), [DEMO_WALKTHROUGH.md](docs/evidence/v2/DEMO_WALKTHROUGH.md) (screenshots),
+raw rows in [docs/evidence/v2/runs/](docs/evidence/v2/runs/), training manifest with hashes in
+[docs/evidence/v2/memory/](docs/evidence/v2/memory/).
+
+## Graph data model
+
+```
+(:State {key, route, title})                          page template, e.g. "/:owner/:repo/issues?state=closed"
+(:State)-[:ACT {eid, kind, role, name, scope, pre,    verified navigation click: role + accessible name (entities
+               successes, failures, sources}]->(:State)  templated "{owner}/{repo}"), landmark scope, prerequisite
+                                                      clicks (e.g. open a menu), outcome counts, source runs
+(:Task {id, goal, cluster})-[:WORKED_AT {steps}]->(:State)
+                                                      where a past task did its real work, and what it did there
+```
+
+v2 memory: graph `pathmemory_v2` (11 pages, 11 steps, 10 tasks, fingerprint `ff0899ff00fbb4d5`) on FalkorDB
+(Docker, port 6391; browser UI http://localhost:3391).
+
+### Cypher the product depends on
+
+All in `src/pathmemory/graph.py`, all parameterised.
+
+```cypher
+// route: shortest verified path avoiding steps that failed in this run, least-failed first
+MATCH (a:State {key:$src}), (b:State {key:$dst})
+MATCH p = (a)-[:ACT*1..6]->(b)
+WHERE all(r IN relationships(p) WHERE r.successes > 0 AND NOT r.eid IN $banned)
+RETURN [n IN nodes(p) | n.key] AS keys,
+       [r IN relationships(p) | [r.eid, r.kind, r.role, r.name, r.pre, r.scope, r.sources]] AS edges,
+       length(p) AS hops, reduce(f = 0, r IN relationships(p) | f + r.failures) AS fails
+ORDER BY hops, fails LIMIT $k
+
+// learn a verified step; outcome counts accumulate across runs
+MATCH (a:State {key:$src}), (b:State {key:$dst})
+MERGE (a)-[r:ACT {eid:$eid}]->(b)
+ON CREATE SET r.kind=$kind, r.role=$role, r.name=$name, r.scope=$scope, r.pre=$pre, r.successes=0, r.failures=0
+SET r.successes = r.successes + $s, r.failures = r.failures + $f
+
+// provenance: remember which training run showed the step (once per run)
+MATCH ()-[r:ACT {eid:$eid}]->()
+SET r.sources = CASE WHEN r.sources IS NULL THEN [$src] WHEN $src IN r.sources THEN r.sources ELSE r.sources + $src END
+
+// destinations offered to the chooser: every page, with the goals of past tasks done there
+MATCH (s:State) OPTIONAL MATCH (t:Task)-[w:WORKED_AT]->(s)
+RETURN s.key, s.title, collect(t.goal), collect(w.steps) ORDER BY s.key
+
+// live learning only (never in evaluation): a remembered step broke
+MATCH ()-[r:ACT {eid:$eid}]->() SET r.failures = r.failures + 1
+```
+
+## Architecture
+
+```
+ BrowserGym observation ──► state.py: URL → page template; element → (role, name, landmark); entities → {owner}/{repo}
+                                │
+ learn.py  successful training runs ──► (:State)-[:ACT {…, sources}]->(:State), (:Task)-[:WORKED_AT]->(:State)   FalkorDB
+           (manifest: run ids, task/goal/file hashes, graph fingerprint)
+                                ▼
+ agent.py (wraps AgentLab GenericAgent; modes none | flat | flatreplay | graph)
+   1. chooser (1 model call): which known page does the goal need, which owner/repo?
+   2. Cypher route from the current page (flatreplay: a stretch of one stored run instead)
+   3. replay clicks without the LLM; fail-closed target match; verify page template + owner/repo after each click;
+      on failure ban the step for this run and query again
+   4. hand over to the LLM (forms, buttons, the answer) with a note on where replay ended
+ run.py   eval: fixture reset + fingerprint and a fresh copy of the memory snapshot before every trial
+ ui.py    demo UI (live and recorded runs, live Cypher)     mcp_server.py  the same memory as MCP tools
+```
+
+## Quick start (local; no hosted deployment)
+
+Needs Docker, [uv](https://docs.astral.sh/uv/) and, for runs with the model, an OpenAI API key.
+
+```bash
+git clone https://github.com/purnasai/pathmemory && cd pathmemory
+scripts/reproduce_v2.sh             # services, fixture, v2 memory + provenance, composed route, ablation: no API key
+cp .env.example .env                # add OPENAI_API_KEY (and OPENAI_MODEL=gpt-6-luna)
+scripts/reproduce_v2.sh --with-llm  # + one composed-route run and one ablated run in the browser (~$0.005)
+uv run pathmemory-ui                # demo UI: http://localhost:8795
+uv run pytest -q                    # unit + integration tests (integration needs the containers)
+```
+
+Step-by-step commands and expected output: [docs/evidence/v2/REPRODUCE.md](docs/evidence/v2/REPRODUCE.md).
+
+### Demo UI (`uv run pathmemory-ui`, http://localhost:8795)
+
+- **v2 composition** (default): training runs, the route FalkorDB returns *now* for the normal UI, with the dashboard
+  step banned, and on the ablated graph (live queries), per-hop source runs, and buttons that run the task **live**
+  in a visible Chromium window from a read-only copy of v2 or of the ablated graph.
+- **Recorded runs**: any saved run step by step with screenshots, labelled RECORDED with its run directory.
+- **Results**: all experiment tables, v1 historical and v2. **Route query**: pick pages, mark steps broken, watch the
+  route change. **Live run**: the live runs; the status line says whether memory replay reached the target page or
+  the checker passed by LLM fallback, and that the memory snapshot was unchanged.
+- The header's memory selector switches the graph between v2, v2 ablated and v1 (historical demo memory, the only
+  one live learning can write to).
+
+![live run](docs/ui_v2_live.png)
 
 ## Historical results v1 (2026-10-16, as recorded; see corrections)
 
@@ -62,99 +198,13 @@ One held-out task (`issues-2`), 5 trials per mode, a demonstration and not a ben
 | UI break, after one repair episode (4 tasks) — success | – | 4/4 | 3/4 |
 | — avg input tokens | – | 36.4k | **15.5k** |
 
-- Flat memory makes prompts bigger and saves nothing; the graph turns memory into skipped LLM calls.
-- Under a UI break the graph detected the dead step on every task and rerouted. On `members-4` (which no mode
-  could solve before the repair) it took 7 steps / 8k tokens vs. flat memory's 14 steps / 73.5k.
-- With this model, memory changes **cost**, not success. Samples are small and on one self-built site —
-  see [RESULTS.md](RESULTS.md) for every number, failure analysis and limits.
+The table is kept as recorded. Its "LLM calls" are LLM-chosen browser steps; counting the chooser and retries,
+v1 graph mode made more model calls than no memory, and the UI-break rows used memory that contained a test-task
+episode. See the correction notes above.
 
-## Graph data model
+### Reproducing v1 (historical; about 1 hour)
 
-```
-(:State {key, route, title})                         a page template, e.g. key "/:owner/:repo/issues?state=closed"
-(:State)-[:ACT {eid, kind, role, name, scope, pre,   a verified navigation click: element role + accessible name
-               successes, failures}]->(:State)       (entities templated: "{owner}/{repo}"), landmark scope,
-                                                     prerequisite clicks (e.g. open a dropdown), outcome counts
-(:Task {id, goal, cluster})-[:WORKED_AT {steps}]->(:State)
-                                                     where a past task did its real work, and what it did there
-```
-
-Graph `pathmemory` on FalkorDB (Docker, port 6391). Browse it at http://localhost:3391.
-
-### Cypher the product depends on
-
-All in `src/pathmemory/graph.py`, all parameterised.
-
-```cypher
-// route finding: shortest verified path that avoids banned (failed) steps, least-failed first
-MATCH (a:State {key:$src}), (b:State {key:$dst})
-MATCH p = (a)-[:ACT*1..6]->(b)
-WHERE all(r IN relationships(p) WHERE r.successes > 0 AND NOT r.eid IN $banned)
-RETURN [n IN nodes(p) | n.key] AS keys,
-       [r IN relationships(p) | [r.eid, r.kind, r.role, r.name, r.pre, r.scope]] AS edges,
-       length(p) AS hops, reduce(f = 0, r IN relationships(p) | f + r.failures) AS fails
-ORDER BY hops, fails LIMIT $k
-
-// learn a verified step (outcome counts accumulate across runs)
-MATCH (a:State {key:$src}), (b:State {key:$dst})
-MERGE (a)-[r:ACT {eid:$eid}]->(b)
-ON CREATE SET r.kind=$kind, r.role=$role, r.name=$name, r.scope=$scope, r.pre=$pre, r.successes=0, r.failures=0
-SET r.successes = r.successes + $s, r.failures = r.failures + $f
-
-// a remembered step broke
-MATCH ()-[r:ACT {eid:$eid}]->() SET r.failures = r.failures + 1
-
-// where past tasks did their work (shown to the destination chooser)
-MERGE (t:Task {id:$id}) SET t.goal=$goal, t.cluster=$cluster
-WITH t MATCH (s:State {key:$key}) MERGE (t)-[w:WORKED_AT]->(s) SET w.steps=$steps
-
-MATCH (s:State) OPTIONAL MATCH (t:Task)-[w:WORKED_AT]->(s)
-RETURN s.key, s.title, collect(t.goal), collect(w.steps) ORDER BY s.key
-```
-
-Why a graph and not a list of saved trajectories: two of the four recovered routes (`issues-2`, `issues-5`)
-combine edges from three different tasks (`Explore` from `explore-1`, `Explore → {repo}` from a repair run,
-`{repo} → Issues → New Issue` from `issues-1`) and exist in no stored trajectory; the graph query assembles
-them. The other two (`members-4`, `repos-3`) follow a route the repair run contains in full; there the gain is
-replay without the LLM, since flat memory had the same trajectory. Failure counts on shared edges affect every
-future route through them. Remove FalkorDB and graph mode has nothing to replay. Per-hop provenance:
-`uv run python -m pathmemory.provenance` → `results/v1-repaired/provenance.json`.
-
-## How it works
-
-```
- BrowserGym observation ──► state.py: URL → page template, element → (role, name, landmark), entities → {owner}/{repo}
-                                │
- learn.py (successful runs) ───►│ (:State)-[:ACT {name, pre, successes, failures}]->(:State)
-                                │ (:Task)-[:WORKED_AT {steps}]->(:State)            FalkorDB
-                                ▼
- agent.py (wraps AgentLab GenericAgent)
-   1. one LLM call: which known page does this goal need, and which owner/repo?
-   2. Cypher: shortest verified route from the current page            ──► find_route
-   3. replay clicks (no LLM), check each page; on failure ban the edge,
-      record it, ask FalkorDB for another route                       ──► report_failure
-   4. hand over to the LLM with what past tasks did on that page
-```
-
-Baselines use the same hint channel and the same frozen memory input, so the comparison is about the memory
-structure, not about who saw more data.
-
-## Quick start (local; no hosted deployment)
-
-Needs Docker, [uv](https://docs.astral.sh/uv/), and an OpenAI API key. Downloads are small (Gitea ≈150 MB,
-FalkorDB ≈700 MB, Chromium). Full reproduction costs well under $1 in API calls with `gpt-6-luna`.
-
-```bash
-git clone https://github.com/purnasai/pathmemory && cd pathmemory
-cp .env.example .env                                   # add OPENAI_API_KEY (and OPENAI_MODEL)
-uv sync && uv run playwright install chromium
-docker compose up -d                                   # FalkorDB :6391 (browser UI :3391), Gitea :3300
-uv run python -m pathmemory.site.seed --reset          # ~9 s: recreate and seed Gitea
-uv run pytest -q                                       # 10 tests (needs FalkorDB)
-uv run pathmemory-ui                                   # demo UI on saved runs: http://localhost:8795
-```
-
-Reproduce the experiments (about 1 hour, runs one browser at a time):
+v1 memory included a test-task repair episode; kept only to reproduce the recorded v1 numbers.
 
 ```bash
 uv run python -m pathmemory.run learn --tag v1                       # 8 training tasks -> memory
@@ -168,32 +218,8 @@ uv run python -m pathmemory.run recovery members-4 issues-2 issues-5 repos-3 --m
 uv run python -m pathmemory.report results/v1/eval.jsonl --select both
 ```
 
-The demo UI reads `results/`, which is not committed (screenshots and step logs are large); run the experiments
-first, or use the screenshots in `docs/`.
 
-Gitea login: `byteblaze` / `hackathon123`. 24 tasks in 6 groups live in `src/pathmemory/site/tasks.py`, each
-checked deterministically (Gitea API state, final URL, or the agent's answer).
-
-### Demo UI
-
-```bash
-uv run pathmemory-ui        # http://localhost:8795
-```
-
-- **Run replay**: any saved run step by step — screenshot, LLM vs. replayed steps, failed step and reroute
-  highlighted on the graph.
-- **Results**: all three experiments; click any cell to replay that run.
-- **Route query**: pick two pages, tick steps to treat as broken, and watch FalkorDB find a different route
-  (with the Cypher it runs).
-- **Live run**: pick a task and a memory mode (optionally break the UI) and press Run. A visible Chromium window
-  does the task, slowed down, while the steps and the graph highlighting update live. With **learn** ticked, a
-  successful run writes back to FalkorDB as it finishes (same rule as the experiments: only verified clicks from
-  successful runs): new steps, steps confirmed again, steps that failed, and the task's worksite. The UI lists the
-  write and highlights it on the graph in yellow. The experiments' memory is copied to graph `pathmemory_v1` before
-  the first live write; **Reset memory to v1** (or `uv run python -m pathmemory.run restore-memory`) puts it back.
-  Needs a desktop session and an OpenAI key.
-
-### MCP server
+## MCP server
 
 Any MCP client can use the memory. `.mcp.json` registers it for Claude Code.
 
@@ -215,7 +241,7 @@ route → break → teach → recompose story over stdio.
 
 ## Evidence and persistence
 
-The run logs behind every table are committed in `docs/evidence/` (JSONL summaries; screenshots and step pickles
+v2 evidence: `docs/evidence/v2/` (see links above). The v1 run logs are committed in `docs/evidence/` (JSONL summaries; screenshots and step pickles
 stay in the git-ignored `results/`). Recompute any table without re-running the agent:
 
 ```bash
@@ -228,7 +254,7 @@ Re-running the experiments with the LLM gives different numbers run to run (`gpt
 temperature 1); `docs/evidence/v1-repeat*` are two repeats of `repos-3` (one failed before the hint fix, one
 passed after it).
 
-**Persistence across sessions** (checked 2026-10-18, `docs/evidence/persistence/`): one process queried the
+**Persistence across sessions** (v1 memory, checked 2026-10-18, `docs/evidence/persistence/`): one process queried the
 memory (11 page templates, 11 verified steps, 10 task worksites) and found the reroute
 `/ → Explore → {repo} → Settings → Collaborators` around the broken dashboard step; FalkorDB was saved and the
 container restarted; a new process got the same counts and the same route. The memory lives in FalkorDB, not in
@@ -239,32 +265,35 @@ and start keep it.
 
 ```
 src/pathmemory/
-  state.py        page templates, semantic steps, element lookup
-  graph.py        FalkorDB schema + queries
-  learn.py        successful runs -> graph + flat store
-  agent.py        PathMemory agent (none / flat / graph)
-  run.py          learn / eval / recovery experiments
-  service.py      shared API for UI + MCP
-  ui.py, static/  demo UI
-  mcp_server.py   MCP tools
-  provenance.py   audit: which saved episode taught each hop of a replayed route
-  site/           Gitea seed data and BrowserGym tasks
+  state.py            page templates, semantic steps, fail-closed element lookup
+  graph.py            FalkorDB schema + queries, provenance, fingerprint, dump/load, migration
+  learn.py            successful runs -> graph + flat store; build_memory (manifest)
+  agent.py            PathMemory agent (none / flat / flatreplay / graph)
+  run.py              build-memory / ablate / eval / live (isolated snapshots, fixture reset per trial)
+  composition.py      composed-route evidence; repro.py  reproduction checks; probe.py  no-LLM browser probes
+  compare.py, report.py, accounting.py, replaycheck.py, migration_check.py, provenance.py   evidence tools
+  service.py, ui.py, static/   demo UI;  mcp_server.py  MCP tools;  site/  Gitea fixture + BrowserGym tasks
+docs/evidence/        v1 (as recorded), v1-derived (corrections), v2 (current evidence)
+scripts/reproduce_v2.sh
 ```
 
 ## AI assistance disclosure
 
-Built with AI coding assistants, as the rules allow:
+AI coding assistants were used, as the rules allow (rule 11: disclosed here):
 
-- **ChatGPT** was used to brainstorm and critique ideas, the architecture and the evaluation design.
-- **Claude Code (Claude Opus 5.5)** wrote most of the code, tests and docs, and ran the experiments, under my
-  direction. I chose the problem and the constraints (no large benchmark downloads, no employer-domain data,
-  fair baselines), reviewed each design decision (route templates, replaying only navigation, the shared
-  hint channel for baselines, the recovery protocol), and decided how to report the results, including the
-  failures.
-- All results in this repo come from real runs; nothing was edited by hand.
+- **ChatGPT / GPT-6** was used to brainstorm and critique ideas, the architecture and the evaluation design, and
+  reviewed the correctness and evaluation changes (P0–P2) before they were accepted.
+- **Claude Code (Claude Opus 5.5)** wrote most of the code, tests and docs and ran the experiments, under my
+  direction. I chose the problem and the constraints (no large benchmark downloads, no employer-domain data, fair
+  baselines), reviewed each design decision (route templates, replaying only navigation, fail-closed replay, the
+  flat-replay baseline, the ablation), and decided how to report the results, including the failures and
+  corrections.
+- All results come from real runs; nothing was edited by hand. All work was done during the event
+  (first commit 2026-10-16 01:57 IST).
 
 ## Limits
 
-One site, one model, small samples, a UI break I chose; not WebArena and not comparable to any leaderboard.
-The model succeeds on nearly every task without memory, so the measured gain is efficiency. Details in
-[RESULTS.md](RESULTS.md).
+One self-built Gitea site with synthetic data, one model, one composition case, 5 trials per cell; not WebArena
+and not comparable to any leaderboard. The model completes these tasks without memory, so what memory changes is how
+the agent gets there and what it costs. The UI break is partial (the activity feed still links issues).
+Corrections to the v1 results: [docs/evidence/v1-derived/CORRECTIONS.md](docs/evidence/v1-derived/CORRECTIONS.md).

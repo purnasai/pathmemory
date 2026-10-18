@@ -56,13 +56,22 @@ def _words(text):
     return {w for w in re.findall(r"[a-z0-9.]+", text.lower()) if w not in STOP}
 
 
-def flat_hint(goal: str, k: int = 3, store_path=FLAT_STORE) -> str | None:
+def flat_context(goal: str, k: int = 3, store_path=FLAT_STORE, only: list[str] | None = None) -> list[dict]:
+    """The trajectories flat mode puts in the prompt: top-k by goal-word Jaccard, or exactly `only` (task ids,
+    in that order) for the labelled retrieval-coverage check."""
     store_path = Path(store_path)
     if not store_path.exists():
-        return None
+        return []
     store = json.loads(store_path.read_text())
+    if only is not None:
+        by_id = {t["task_id"]: t for t in store}
+        return [by_id[i] for i in only]
     g = _words(goal)
-    ranked = sorted(store, key=lambda t: -len(g & _words(t["goal"])) / (len(g | _words(t["goal"])) or 1))[:k]
+    return sorted(store, key=lambda t: -len(g & _words(t["goal"])) / (len(g | _words(t["goal"])) or 1))[:k]
+
+
+def flat_hint(goal: str, k: int = 3, store_path=FLAT_STORE, only: list[str] | None = None) -> str | None:
+    ranked = flat_context(goal, k, store_path, only)
     if not ranked:
         return None
     blocks = []
@@ -150,6 +159,7 @@ class PathMemoryAgentArgs(AgentArgs):
     # the failure is also written to memory.
     record_failures: bool = False
     flat_store: str | None = None  # flat-baseline trace file; default learn.FLAT_STORE
+    flat_only: list[str] | None = None  # flat mode: put exactly these task ids' trajectories in the prompt
 
     def __post_init__(self):
         self.agent_name = self.agent_name or f"PathMemory-{self.mode}"
@@ -157,7 +167,8 @@ class PathMemoryAgentArgs(AgentArgs):
     def make_agent(self):
         return PathMemoryAgent(self.base_args.make_agent(), self.mode, self.graph_name,
                                self.base_args.chat_model_args.make_model(), self.live_file,
-                               record_failures=self.record_failures, flat_store=self.flat_store)
+                               record_failures=self.record_failures, flat_store=self.flat_store,
+                               flat_only=self.flat_only)
 
     def set_benchmark(self, benchmark, demo_mode):
         self.base_args.set_benchmark(benchmark, demo_mode)
@@ -208,7 +219,7 @@ def _transient(err: str) -> bool:
 
 class PathMemoryAgent(bgym.Agent):
     def __init__(self, base, mode, graph_name, chooser_llm, live_file=None, record_failures=False, flat_store=None,
-                 graph=None):
+                 graph=None, flat_only=None):
         self.usage = _usage()  # per-episode model usage by role, see CountingLLM
         self.base, self.mode = base, mode
         self.llm = CountingLLM(chooser_llm, self.usage, "chooser")
@@ -217,6 +228,7 @@ class PathMemoryAgent(bgym.Agent):
         self.live_file = live_file
         self.record_failures = record_failures
         self.flat_store = flat_store or FLAT_STORE
+        self.flat_only = flat_only
         self.live_steps: list[dict] = []
         if graph is None and mode == "graph":
             graph = GraphMemory(graph_name)
@@ -277,7 +289,10 @@ class PathMemoryAgent(bgym.Agent):
         if not self.started:
             self.started = True
             if self.mode == "flat":
-                self.hint = flat_hint(self._goal(obs), store_path=self.flat_store)
+                ctx = flat_context(self._goal(obs), store_path=self.flat_store, only=self.flat_only)
+                self.log.append({"event": "flat_context", "tasks": [t["task_id"] for t in ctx],
+                                 "pinned": self.flat_only is not None})
+                self.hint = flat_hint(self._goal(obs), store_path=self.flat_store, only=self.flat_only)
             elif self.mode in REPLAY_MODES:
                 self._plan(obs)
         if self.mode in REPLAY_MODES:
@@ -402,6 +417,9 @@ class PathMemoryAgent(bgym.Agent):
         elif self.expect and (bad := self._binding_mismatch(st)):
             self._fail(key, f"wrong entity: {bad}", st)
         elif self.expect:
+            # landed where memory said, on the chosen entity: logged so the demo can show each check
+            self.log.append({"event": "verified", "page": key, "url": obs["url"],
+                             "entities": {k: v for k, v in st.bindings.items() if k in CHECKED_BINDINGS}})
             self.expect, self.last_eid = None, None
         while self.queue:
             item = self.queue[0]

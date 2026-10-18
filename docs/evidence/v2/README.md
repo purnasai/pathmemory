@@ -34,3 +34,14 @@ Two runs on one task prove the plumbing works. They say nothing about success ra
 - `replaycheck_v1_memory.json`, `replaycheck_v2_memory.json`: replayed clicks checked against the memory replayed.
 - `migration_v1_copy.json`: scoped edge-id migration on a disposable copy of v1.
 - `probes.jsonl`: no-LLM real-browser wrong-entity and ambiguous-target probes.
+
+## P2 (branch p2-submission): submission readiness
+
+- `memory/graph_v2.json`, `memory/graph_v2_ablated.json`: exact dumps of the two graphs (reload to the same
+  fingerprints); [REPRODUCE.md](REPRODUCE.md) and `scripts/reproduce_v2.sh` rebuild and check everything from a clone.
+- `runs/broken_flat_pinned.jsonl`: labelled retrieval-coverage check (flat prompt with the route's source runs pinned).
+- `live/*.json`: the two live UI runs of 2026-10-18 (composed route; ablated graph), with the snapshot fingerprint
+  before and after each.
+- Path normalization: the `exp_dir` field of the v2 JSONL rows (`runs/`, `smoke.jsonl`, `probes.jsonl`) was rewritten
+  from an absolute path on the author's machine to the project-relative `results/…` path. No other field changed.
+  v1 evidence is unchanged and still contains absolute paths.

@@ -164,6 +164,33 @@ class GraphMemory:
         blob = json.dumps(sorted(rows, key=json.dumps), sort_keys=True)
         return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
+    def dump(self) -> dict:
+        """Everything fingerprint() covers, as JSON: load_dump() of this gives the same fingerprint."""
+        return {
+            "graph": self.name, "fingerprint": self.fingerprint(),
+            "states": [dict(zip(("key", "route", "title"), r)) for r in
+                       self.q("MATCH (s:State) RETURN s.key, s.route, s.title ORDER BY s.key")],
+            "edges": self.edges(),
+            "worksites": [dict(zip(("task", "goal", "cluster", "steps", "state"), r)) for r in self.q(
+                "MATCH (t:Task)-[w:WORKED_AT]->(s:State) RETURN t.id, t.goal, t.cluster, w.steps, s.key ORDER BY t.id")],
+        }
+
+    def load_dump(self, d: dict) -> str:
+        """Replace this graph with a dump; returns the new fingerprint (callers compare it with d["fingerprint"])."""
+        self.clear()
+        for s in d["states"]:
+            self.q("CREATE (:State {key:$key, route:$route, title:$title})", **s)
+        for e in d["edges"]:
+            props = {k: e[k] for k in ("eid", "kind", "role", "name", "scope", "pre", "successes", "failures")}
+            self.q("""MATCH (a:State {key:$src}), (b:State {key:$dst}) CREATE (a)-[r:ACT]->(b) SET r = $props""",
+                   src=e["src"], dst=e["dst"], props={k: v for k, v in props.items() if v is not None})
+            if e["sources"] is not None:
+                self.q("MATCH ()-[r:ACT {eid:$eid}]->() SET r.sources=$s", eid=e["eid"], s=e["sources"])
+        for w in d["worksites"]:
+            self.q("""MERGE (t:Task {id:$task}) SET t.goal=$goal, t.cluster=$cluster
+                      WITH t MATCH (s:State {key:$state}) CREATE (t)-[:WORKED_AT {steps:$steps}]->(s)""", **w)
+        return self.fingerprint()
+
     def migrate_edge_ids(self) -> int:
         """Recompute every edge id with the current edge_id() (v1 ids did not include the scope).
         v1 ids were coarser, so each edge maps to exactly one new id; nothing is merged or split."""

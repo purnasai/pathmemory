@@ -65,6 +65,7 @@ def base_agent_args(demo: bool = False) -> GenericAgentArgs:
 # Evaluation never touches the memory it is scored against: before every graph-mode trial the
 # designated snapshot is copied into this working graph, and the agent only reads it.
 EVAL_WORK_GRAPH = "pathmemory_eval_work"
+LIVE_WORK_GRAPH = "pathmemory_live_work"
 ROW_SCHEMA = 2
 
 
@@ -154,9 +155,11 @@ def run_task(task_id: str, agent, out_dir: Path, max_steps=15, ui_break=None, he
     seconds = round(time.time() - t0, 1)
     d = Path(exp.exp_dir)
     summary = json.loads((d / "summary_info.json").read_text())
-    log, sources = [], {"llm": 0, "graph": 0}
-    for f in sorted(d.glob("step_*.pkl.gz")):
-        info = (pickle.load(gzip.open(f)).agent_info or {}).get("extra_info") or {}
+    log, sources, final_url = [], {"llm": 0, "graph": 0}, None
+    for f in sorted(d.glob("step_*.pkl.gz"), key=lambda f: int(f.name.split("_")[1].split(".")[0])):  # numeric order
+        step = pickle.load(gzip.open(f))
+        final_url = (step.obs or {}).get("url", final_url)
+        info = (step.agent_info or {}).get("extra_info") or {}
         pm = info.get("pathmemory")
         if pm:
             sources[pm["source"]] += 1
@@ -176,7 +179,9 @@ def run_task(task_id: str, agent, out_dir: Path, max_steps=15, ui_break=None, he
         "recovered": any(e["event"] == "recovered" for e in log),
         "edge_failures": sum(e["event"] == "edge_failed" for e in log),
         "fixture": fixture, "started": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t0)),
-        "log": log, "exp_dir": str(d),
+        # relative to the project, so committed result rows carry no machine-specific path
+        "final_url": final_url, "log": log,
+        "exp_dir": str(d.resolve().relative_to(settings.root)) if d.resolve().is_relative_to(settings.root) else str(d),
     }
 
 
@@ -201,10 +206,14 @@ def main():
     p.add_argument("--break-ui", action="store_true", help="live/eval: hide the dashboard repo links")
     p.add_argument("--live-file", help="live: progress JSON for the demo UI")
     p.add_argument("--learn", action="store_true", help="live: write the run's verified steps to memory if it succeeds")
+    p.add_argument("--live-snapshot", help="live: replay from a working copy of this graph (e.g. pathmemory_v2); "
+                                           "the snapshot itself is checked unchanged afterwards; no learning")
     p.add_argument("--snapshot", default="pathmemory",
                    help="eval/recovery: memory graph to evaluate from; it is copied, never written")
     p.add_argument("--flat", default=str(FLAT_STORE), help="eval/recovery: flat store (copied once per batch)")
     p.add_argument("--trials", type=int, default=1, help="eval/recovery: repeat every (task, mode) this many times")
+    p.add_argument("--flat-only", nargs="+", help="eval: flat mode gets exactly these task ids' trajectories "
+                                                  "(retrieval-coverage check; recorded in every row)")
     p.add_argument("--graph", help="build-memory/ablate: graph to write")
     p.add_argument("--manifest", help="build-memory: manifest JSON to write")
     p.add_argument("--edge", nargs="+", help="ablate: edge ids to remove from the copy")
@@ -248,15 +257,22 @@ def main():
         out.mkdir(parents=True, exist_ok=True)
         write_json(live_file, {"status": "starting", "mode": a.mode, "steps": [], "events": [],
                                "note": "resetting the site" if TASKS_BY_ID[task].kind == "mutate" else "opening browser"})
+        frozen = None
+        if a.live_snapshot:  # demo of a fingerprinted memory: read-only, same isolation as evaluation
+            assert not a.learn, "--live-snapshot runs never learn"
+            snap = GraphMemory(a.live_snapshot)
+            frozen = {"snapshot": a.live_snapshot, "fingerprint_before": snap.fingerprint()}
+            GraphMemory(LIVE_WORK_GRAPH).restore(a.live_snapshot)
         agent = PathMemoryAgentArgs(base_args=base_agent_args(demo=True), mode=a.mode, live_file=live_file,
-                                    record_failures=a.learn)  # memory is written only with --learn
+                                    record_failures=a.learn,  # memory is written only with --learn
+                                    graph_name=LIVE_WORK_GRAPH if frozen else "pathmemory")
         graph = GraphMemory() if a.learn else None
         if graph:
             backup_memory(graph)
             before = graph.snapshot()  # taken before the run: graph mode also records failed steps while running
         try:
             r = run_task(task, agent, out / "live", a.max_steps, headless=False, slow_mo=700,
-                         ui_break=HIDE_DASHBOARD_REPO_LINKS if a.break_ui else None)
+                         ui_break=HIDE_DASHBOARD_REPO_LINKS if a.break_ui else None, reset=True if frozen else None)
         except Exception as e:  # noqa: BLE001 - shown in the UI
             write_json(live_file, {**json.loads(Path(live_file).read_text()), "status": "error", "note": str(e)[:300]})
             raise
@@ -266,10 +282,14 @@ def main():
             if r["success"]:
                 ingest([Path(r["exp_dir"])], graph)
             memory = {**memory_diff(before, graph.snapshot()), "learned": r["success"], "stats": graph.stats()}
+        if frozen:
+            frozen["fingerprint_after"] = GraphMemory(a.live_snapshot).fingerprint()
+            frozen["unchanged"] = frozen["fingerprint_after"] == frozen["fingerprint_before"]
         final = json.loads(Path(live_file).read_text())
         write_json(live_file, {**final, "status": "done", "success": r["success"], "tokens": r["input_tokens"],
-                               "seconds": r["seconds"], "dir": str(Path(r["exp_dir"]).relative_to(RESULTS)),
-                               "memory": memory})
+                               "model_calls": r["model_calls"], "seconds": r["seconds"], "fixture": r["fixture"],
+                               "task": task, "break_ui": a.break_ui, "final_url": r["final_url"],
+                               "dir": str(Path(r["exp_dir"]).relative_to(RESULTS)), "memory": memory, "frozen": frozen})
         print(json.dumps({k: v for k, v in r.items() if k != "log"}))
         return
 
@@ -312,13 +332,15 @@ def main():
                 work.restore(a.snapshot)
                 before = work.fingerprint()
                 assert before == snap_fp, "working copy differs from the snapshot"
-                r = run_task(t, agent_args(mode, graph_name=EVAL_WORK_GRAPH, flat_store=str(flat_copy)),
+                r = run_task(t, agent_args(mode, graph_name=EVAL_WORK_GRAPH, flat_store=str(flat_copy),
+                                           flat_only=a.flat_only),
                              out / a.phase, a.max_steps, ui_break=HIDE_DASHBOARD_REPO_LINKS if broken else None,
                              reset=True, fixture=fixture)
                 after = work.fingerprint()
                 if snapshot.fingerprint() != snap_fp or file_sha(flat_copy) != flat_sha:
                     raise RuntimeError("memory changed during evaluation")
                 r["trial"], r["ui_break"], r["max_steps"] = trial, broken, a.max_steps
+                r["flat_only"] = a.flat_only if mode == "flat" else None
                 r["memory"] = {"snapshot": a.snapshot, "fingerprint": snap_fp, "unchanged": after == before,
                                "flat_store": a.flat, "flat_store_sha": flat_sha}
                 write([r], out / f"{a.phase}.jsonl")

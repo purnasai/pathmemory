@@ -47,13 +47,14 @@ class PathMemoryService:
     def graph_view(self) -> dict:
         nodes = [{"key": d["key"], "title": d["title"], "goals": d["goals"]} for d in self.graph.destinations()]
         edges = [
-            {"eid": e, "src": a, "dst": b, "role": role, "name": name, "pre": pre or [],
-             "successes": s, "failures": f}
-            for a, e, role, name, pre, s, f, b in self.graph.q(
+            {"eid": e, "src": a, "dst": b, "role": role, "name": name, "scope": scope, "pre": pre or [],
+             "successes": s, "failures": f, "sources": src or []}
+            for a, e, role, name, scope, pre, s, f, src, b in self.graph.q(
                 "MATCH (a:State)-[r:ACT]->(b:State) "
-                "RETURN a.key, r.eid, r.role, r.name, r.pre, r.successes, r.failures, b.key")
+                "RETURN a.key, r.eid, r.role, r.name, r.scope, r.pre, r.successes, r.failures, r.sources, b.key")
         ]
-        return {"nodes": nodes, "edges": edges, "stats": self.graph.stats()}
+        return {"graph": self.graph.name, "fingerprint": self.graph.fingerprint(), "nodes": nodes, "edges": edges,
+                "stats": self.graph.stats()}
 
     def pages(self) -> list[dict]:
         return self.graph.destinations()

@@ -1,3 +1,6 @@
+# fixed project name: a second checkout reuses these containers instead of starting new ones on the same ports
+name: t12-pathmemory
+
 services:
   falkordb:
     image: falkordb/falkordb:latest

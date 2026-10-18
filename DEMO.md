@@ -1,18 +1,58 @@
-# Demo video script (about 3 minutes)
+# Demo video script (v2, about 2:45)
 
-Before recording: `docker compose up -d`, `uv run pathmemory-ui`, open http://localhost:8795 at 1600×950,
-and have FalkorDB's browser (http://localhost:3391, graph `pathmemory`) open in a second tab.
+Everything shown is the real UI and a real browser. The one run done live on camera is labelled LIVE in the UI;
+recorded runs are labelled RECORDED. Do not cut the live run's waiting time into a fake speed-up; trim with a
+visible cut if needed.
 
-| Time | Screen | Say |
-|---|---|---|
-| 0:00–0:20 | Title / README top | "Browser agents relearn the same navigation on every task: find the repo, find Settings, find Collaborators. Every click is an LLM call. PathMemory gives the agent a memory of how the website works, in FalkorDB." |
-| 0:20–0:45 | Demo UI, graph only | "Each node is a page *template*: one node for every repo's collaborator page. Each edge is a click the agent actually did and verified, with success and failure counts. These came from 8 ordinary training tasks." Point at `/:owner/:repo` → Settings → Collaborators. |
-| 0:45–1:20 | Results tab → Normal UI → click `members-2 / graph` | "On a new task, one LLM call picks the destination page. FalkorDB returns the route, and these green REPLAY steps run without the LLM. Then the LLM does the actual work: type carol, click Add." Back to Results: "Across 14 held-out tasks: same success, 26% fewer input tokens. Flat memory, pasting past trajectories into the prompt, costs *more*." |
-| 1:20–1:50 | Run replay → UI break before repair → `members-2 / graph` | "Now we break the site: the dashboard repo links disappear. Memory's first step fails — red. It knows no other way yet, so the LLM takes over and finds one through Explore. That run gets learned." |
-| 1:50–2:30 | UI break after repair → `members-4 / graph` (default view); click steps 0–4 | "Next task, different repo, private, which no mode could solve before. The dashboard step fails, FalkorDB reroutes through Explore, a route one earlier repair run verified. Four clicks replayed, 7 steps, 8k tokens. Flat memory had the same past run pasted in its prompt and needed 14 steps and 73k. (For composition, show `issues-2`: Explore and the repo link from the repair run, Issues and New Issue from issues-1, a route no single run contains.)" |
-| 2:30–2:50 (optional, live) | Live run tab: members-4, graph memory, "break the UI" and "learn" ticked → Run; show the Chromium window beside the UI, then the yellow "Written to FalkorDB" panel | "And live: the browser opens, the dashboard link is gone, memory reroutes through Explore — the green steps are replayed with no LLM call — and the model adds erin. Then the run writes back to FalkorDB: the broken link gets another failure, the four steps it used are confirmed again, and this task becomes a new worksite. Yellow edges on the graph are what this run just wrote." (≈ 1 minute; cut while it runs. Press "Reset memory to v1" before each take.) |
-| 2:30–2:50 | Route query tab: tick the dashboard step, show the route and the Cypher | "It's a plain graph query: shortest verified path that avoids failed steps. The same queries are exposed as MCP tools, so any agent can use the memory." |
-| 2:50–3:00 | README results table | "Honest limits: one site, one model, small samples. The model already succeeds without memory, so the gain is cost and recovery, not raw success." |
+## Before recording
 
-Fallback if anything breaks during recording: every screen is a saved run, so nothing calls the LLM or Gitea live
-except the Route query tab, which only needs FalkorDB.
+```bash
+docker compose up -d && uv run python -m pathmemory.repro fixture && uv run python -m pathmemory.repro load
+uv run pathmemory-ui        # open http://localhost:8795, browser at ~1500x950
+```
+Have a terminal visible for the first 10 s. The live run opens a second, visible Chromium window; place it to the
+right of the UI. A live run costs about $0.002 and takes about 75 s (slowed so each click is visible).
+
+## Script
+
+**0:00–0:20 · The problem** (UI, v2 composition tab, top card)
+> "Browser agents redo the same navigation every task. Memory usually means saved trajectories. Here the dashboard
+> no longer shows repository links, so the trajectory that starts there is dead. Can memory still get the agent to
+> the New Issue form for primer/design?"
+
+**0:20–0:45 · What memory knows** (scroll to "1 · Training episodes")
+> "Memory was built from ten successful runs of *training* tasks only. None of them is this task. Each graph edge
+> is a click that was verified to lead to a page, and it remembers which run taught it."
+Click the `{repo}` edge on the graph: the info box shows `learned from: explore-3`. Click `New Issue`: `issues-1`.
+
+**0:45–1:15 · The graph's decision** (scroll to "2 · The graph's decision", LIVE QUERY badge)
+> "This is FalkorDB answering now. Normally the route is dashboard → repo → Issues → New Issue, all from one run.
+> With the dashboard step banned, the same Cypher query returns Explore → design → Issues → New Issue: Explore and
+> the repo link from explore-3, Issues and New Issue from issues-1."
+Point at the gold badges, then at "No single past run contains this route ✓" and "Flat replay finds 0 route(s)".
+Open "Cypher" briefly.
+
+**1:15–2:15 · Real execution** (press **Run composed route (v2, links hidden)**)
+> "Now a real run: Chromium, real model, Gitea reset first, memory is a read-only copy."
+While it runs (Live tab + browser window): the dashboard has no repo list → event "step failed: link
+'{owner}/{repo}': missing" → "rerouted via /explore/repos …" → four REPLAY steps, each followed by a green
+"✓ verified … owner=primer repo=design" → LLM steps fill the title, pick carol, press Create Issue.
+At the end, read the status line:
+> "Checker passed, memory replay reached the goal page, six model calls, ended on primer/design/issues/4, and the
+> memory snapshot is unchanged."
+
+**2:15–2:40 · Ablation** (memory selector → "v2 ablated"; or v2 tab → "show ablated graph")
+> "Remove the one bridge edge, taught only by explore-3, from a copy of the graph. The same query now returns no
+> route."
+Recorded runs tab → open `ablation / graph` (RECORDED label):
+> "In the evaluation the agent still finished by itself, but memory replay reached the page 0 of 5 times, against 5
+> of 5 with the bridge. Single-trajectory flat replay: also 0 of 5."
+
+**2:40–2:50 · Honest summary** (Results tab, v2 tables)
+> "Every mode passed the checker; the difference is that the graph composed a route no run contained and executed
+> it, verified, at lower model cost. One task, five trials: a demonstration, not a benchmark."
+
+## If the live run fails on camera
+
+Say so, open the RECORDED composed run (Recorded runs → `broken / graph`, 2026-10-18 18:28) and walk the same events
+with screenshots. Never present the recorded run as live.

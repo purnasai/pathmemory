@@ -1,96 +1,66 @@
 # PathMemory: Graph Hacks submission (Track 02: Agent Memory and Coordination)
 
-Repo: https://github.com/purnasai/pathmemory. Built 16–18 Oct 2026 for the hackathon.
+Repo: https://github.com/purnasai/pathmemory. Built 16–18 Oct 2026 for the hackathon (first commit 2026-10-16 01:57 IST).
 
 ## One-line pitch
-Procedural memory for browser agents in FalkorDB. Verified navigation steps from past tasks become a graph of
-page templates. New tasks get routes from a Cypher query, replay them without the LLM, check every page on
-arrival, and reroute when a step breaks. The memory persists across tasks, processes and restarts.
+Procedural memory for browser agents in FalkorDB: verified UI steps from separate past runs are joined by a Cypher
+path query into a route no single run took, and the agent replays it in a real browser with every page and
+entity checked.
 
 ## Problem
-Browser agents rediscover the same navigation on every task, and every click costs an LLM call. Memory that
-pastes past trajectories into the prompt (Agent Workflow Memory style) makes prompts bigger and can't combine
-pieces of different runs. When the UI changes, a remembered trajectory breaks entirely.
+Browser agents rediscover the same navigation on every task, and memory is usually whole past trajectories. When
+the page a trajectory starts from changes, that trajectory is dead, and the knowledge needed to get around it is
+spread over runs that were about other tasks.
 
 ## How memory works
-- `(:State)` = page template (`/:owner/:repo/settings/collaboration`).
-- `(:State)-[:ACT {role, name, successes, failures}]->(:State)` = a click verified to lead to that page. Outcome
-  counts accumulate across runs, and failures are recorded when a remembered step breaks.
-- `(:Task)-[:WORKED_AT]->(:State)` = where past tasks did their real work.
-- Retrieval is a bounded variable-length Cypher match that excludes banned edges and orders by hops, then
-  failures. Writing back: successful runs (experiments, or a live run with "learn" on) MERGE their verified
-  steps. Six MCP tools expose the same memory to any MCP client.
+- `(:State)` = page template (`/:owner/:repo/issues`); `(:State)-[:ACT {role, name, scope, successes, failures,
+  sources}]->(:State)` = a click verified to lead to that page, with the training runs that showed it;
+  `(:Task)-[:WORKED_AT]->(:State)` = where past tasks did their work.
+- Route = bounded variable-length Cypher match, excluding steps that failed in this run, shortest then least-failed.
+- Replay is fail-closed (one visible, unambiguous element in the remembered landmark; href and landing page must
+  match the chosen owner/repo). Evaluation never writes to memory.
 
-## Verified results
-All tables were recomputed on 2026-10-18 from the committed logs in `docs/evidence/`. Same agent (AgentLab
-GenericAgent), same model (`gpt-6-luna`), same prompts, actions and 15-step budget in every mode.
+## Verified result (v2, 2026-10-18)
+Held-out task `issues-2`, dashboard repository links hidden, `gpt-6-luna`, 5 trials per mode, every trial reported:
 
-> **Correction (2026-10-18, branch `p0-correctness`):** the "LLM calls" columns below count LLM-chosen browser steps, not model calls. Counting the destination chooser and parse retries, graph mode made **more** model calls than no memory on the normal UI (4.64 vs 4.21 per task); the input-token savings stand. `repos-5` was run twice with different goals. v1 evaluation also wrote failure counts to its own memory and did not reset the site before read-only tasks. Details and corrected numbers: [docs/evidence/v1-derived/CORRECTIONS.md](docs/evidence/v1-derived/CORRECTIONS.md).
+- **Graph-composed replay reached the target page in 5/5 trials; single-trajectory flat replay (same chooser,
+  matcher, checks, fallback) in 0/5; the graph with the one bridge step removed in 0/5.**
+- The composed route `/ → Explore → design → Issues → New Issue` joins `explore-3` (Explore → repository) and
+  `issues-1` (repository → Issues → New Issue); no training run contains it (automated test).
+- Every mode passed the unchanged checker in every trial: **no task-success advantage**, no latency advantage, no
+  significance claim. Graph used 6.0 model calls and $0.0017 per task against 7.0–8.4 calls and $0.0023–0.0029 for
+  the others (litellm list price). No-memory used fewer browser actions (7 vs 9) via an activity-feed shortcut that
+  memory cannot learn.
+- Flat prompt memory's top-3 retrieval did not include the two essential runs; pinning them into its prompt did not
+  change its path or cost.
 
-**Normal UI, 14 held-out tasks:**
-
-| Mode | Success | Avg LLM calls | Avg input tokens |
-|---|---|---|---|
-| No memory | 14/14 | 4.1 | 13,879 |
-| Flat (top-3 past trajectories) | 14/14 | 4.3 | 16,612 |
-| **Graph** | **13/14** | **3.5** | **10,332** |
-
-**UI break (dashboard repo links removed), after learning from one repair episode, 4 tasks:**
-
-| Mode | Success | Avg LLM calls | Avg input tokens |
-|---|---|---|---|
-| Flat | 4/4 | 8.0 | 36,352 |
-| **Graph** | 3/4 | 5.8 | 15,535 |
-
-Before any repair was learned (5 tasks): none 3/5, flat 4/5, graph 4/5. The graph found the dead step but knew no
-other route.
-
-- **Success caveat:** with this model, memory changes cost, not success. On the normal UI, graph is 13/14 against
-  14/14. The failure (`repos-3`) is a hint problem that was fixed later; repeats: 1 failed before the fix, 1
-  passed after.
-- **Composition**, audited per hop with `python -m pathmemory.provenance`:
-  - `issues-2` and `issues-5` replayed routes stitched from three different tasks (`explore-1`, repair run
-    `members-2`, `issues-1`) that no single episode contains.
-  - `members-4` and `repos-3` replayed a route the repair episode contains in full. There the gain over flat memory
-    (`members-4`: 7 steps / 8.0k tokens against 14 / 73.5k) comes from replaying without the LLM, not from
-    composition.
-- **Persistence:** two separate processes, with a FalkorDB container restart between them, saw the same memory
-  (11 templates, 11 steps, 10 worksites) and computed the same reroute around the broken step
-  (`docs/evidence/persistence/`).
+Details: `docs/evidence/v2/FAIR_COMPARISON.md`, `COMPOSITION.md`, `DEMO_WALKTHROUGH.md`. v1 results (2026-10-16) are
+kept as recorded with corrections in `docs/evidence/v1-derived/CORRECTIONS.md`; the v1 recovery memory contained a
+test-task episode and is superseded by v2.
 
 ## Why FalkorDB is central
-Routes are not stored anywhere. Each one is computed by the variable-length Cypher query over edges written by
-different runs, with failure counts shared across every route that uses an edge. Rerouting after a failure is the
-same query with the failed edge banned. Without FalkorDB, graph mode has nothing to replay.
+Routes are not stored anywhere: each one is a path query over edges written by different runs. Rerouting is the same
+query with the failed edge banned. Remove the bridge edge and the route disappears; remove FalkorDB and graph mode
+has nothing to replay.
 
 ## Limits
-- Small samples, one run each: 14, 5 and 4 tasks.
-- One self-seeded Gitea site and one model.
-- The UI break is synthetic, chosen by me.
-- Replayed clicks still count as browser steps.
-- The compose file has no volume, so `docker compose down` deletes the memory.
-- The "learn a new step live, then reuse it" demo is not reliable. The reliable live demo is `members-4` in graph
-  mode with the UI broken.
+One self-seeded Gitea site (synthetic data), one model, one composition case, 5 trials per cell. The UI break is
+partial. `explore-3` was added as a training task for v2 after inspecting the training data (v1's equivalent step
+came from a test-task episode).
 
 ## Reproduce
 ```bash
 git clone https://github.com/purnasai/pathmemory && cd pathmemory
-cp .env.example .env            # OPENAI_API_KEY
-uv sync && uv run playwright install chromium
-docker compose up -d && uv run python -m pathmemory.site.seed --reset
-uv run pytest -q                # 12 tests
-# recompute the published tables from the committed logs (no LLM needed):
-uv run python -m pathmemory.report docs/evidence/v1/eval.jsonl --select both
-uv run python -m pathmemory.report docs/evidence/v1/recovery.jsonl --select both
-uv run python -m pathmemory.report docs/evidence/v1-repaired/recovery.jsonl --select both
-# full re-run with the LLM (~1 h; numbers vary run to run): see README "Quick start"
-uv run pathmemory-ui            # http://localhost:8795
+scripts/reproduce_v2.sh             # no API key: fixture, v2 memory, provenance, composed route, ablation
+scripts/reproduce_v2.sh --with-llm  # + browser runs (OpenAI key in .env)
+uv run pathmemory-ui                # http://localhost:8795, "v2 composition" tab
 ```
 
 ## Demo video
-3 minutes maximum; the script is in `DEMO.md`. Show composition with `issues-2`. Show the cost gap with `members-4`
-(the same trajectory was available to flat memory).
+Script in `DEMO.md` (about 2:45): training runs and edge provenance, the live Cypher decision, one live browser run
+of the composed route, the ablation.
 
 ## AI assistance disclosure
-Built with an AI coding assistant (Claude Code), directed and reviewed by the author, who can explain the state
-templating, graph model, route query, replay and rerouting, and the evaluation.
+Built with AI coding assistants (Claude Code wrote most code, tests and docs; ChatGPT/GPT-6 for design critique and
+review), directed and reviewed by the author, who can explain the state templating, graph model, route query,
+fail-closed replay and the evaluation. See README "AI assistance disclosure".

@@ -77,8 +77,38 @@ def markdown(tab: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# litellm 1.80.0 model table, "gpt-6-luna", standard tier (what AgentLab's tracker multiplies by)
+PRICE_IN, PRICE_OUT = 0.10 / 1e6, 0.50 / 1e6
+
+
+def costs(rows: list[dict]) -> list[dict]:
+    """Per (condition, mode): mean USD per task, split into chooser and base agent, with call counts.
+    Parse retries = base model calls beyond one per LLM-chosen browser step."""
+    groups = defaultdict(list)
+    for r in rows:
+        groups[(r["condition"], r["mode"])].append(r)
+    out = []
+    mean = statistics.mean
+    for (cond, mode), rs in groups.items():
+        usd = [r["input_tokens"] * PRICE_IN + r["output_tokens"] * PRICE_OUT for r in rs]
+        chooser = [r["chooser_input_tokens"] * PRICE_IN + r["chooser_output_tokens"] * PRICE_OUT for r in rs]
+        out.append({
+            "condition": cond, "mode": mode, "trials": len(rs), "checker_passed": sum(r["success"] for r in rs),
+            "usd_per_task": round(mean(usd), 5), "usd_min": round(min(usd), 5), "usd_max": round(max(usd), 5),
+            "usd_chooser": round(mean(chooser), 5), "usd_base": round(mean(usd) - mean(chooser), 5),
+            "tracker_usd_per_task": round(mean(r["est_cost_usd"] for r in rs), 5),
+            "input_tokens": round(mean(r["input_tokens"] for r in rs)), "output_tokens": round(mean(r["output_tokens"] for r in rs)),
+            "chooser_calls": mean(r["chooser_calls"] for r in rs), "base_calls": mean(r["base_calls"] for r in rs),
+            "parse_retries": mean(r["base_calls"] - r["llm_steps"] for r in rs),
+            "model_calls": mean(r["model_calls"] for r in rs),
+        })
+    order = {m: i for i, m in enumerate(MODES)}
+    return sorted(out, key=lambda r: (r["condition"], order.get(r["mode"], 9)))
+
+
 if __name__ == "__main__":
     spec = dict(a.split("=", 1) for a in sys.argv[1:])
-    tab = table(load(spec))
-    print(json.dumps(tab, indent=1))
+    rows = load(spec)
+    tab = table(rows)
+    print(json.dumps({"table": tab, "costs": costs(rows)}, indent=1))
     print(markdown(tab), file=sys.stderr)

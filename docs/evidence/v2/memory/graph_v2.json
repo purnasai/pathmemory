@@ -1,0 +1,323 @@
+{
+ "graph": "pathmemory_v2",
+ "fingerprint": "ff0899ff00fbb4d5",
+ "states": [
+  {
+   "key": "/",
+   "route": "/",
+   "title": "byteblaze - Dashboard - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/:owner/:repo",
+   "route": "/:owner/:repo",
+   "title": "byteblaze/dotfiles: My shell and editor configuration - dotfiles - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/:owner/:repo/issues",
+   "route": "/:owner/:repo/issues",
+   "title": "Issues - a11yproject.com - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/:owner/:repo/issues/:n",
+   "route": "/:owner/:repo/issues/:n",
+   "title": "#4 - Screen reader announces menu twice - a11yproject.com - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/:owner/:repo/issues/new",
+   "route": "/:owner/:repo/issues/new",
+   "title": "New Issue - a11yproject.com - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/:owner/:repo/settings",
+   "route": "/:owner/:repo/settings",
+   "title": "Repository - dotfiles - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/:owner/:repo/settings/collaboration",
+   "route": "/:owner/:repo/settings/collaboration",
+   "title": "Collaborators - dotfiles - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/explore/repos",
+   "route": "/explore/repos",
+   "title": "Explore - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/repo/create",
+   "route": "/repo/create",
+   "title": "New Repository - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/user/settings",
+   "route": "/user/settings",
+   "title": "Profile - Gitea: Git with a cup of tea"
+  },
+  {
+   "key": "/user/settings/keys",
+   "route": "/user/settings/keys",
+   "title": "SSH / GPG Keys - Gitea: Git with a cup of tea"
+  }
+ ],
+ "edges": [
+  {
+   "src": "/",
+   "eid": "c114f1b71d3c",
+   "kind": "click",
+   "role": "link",
+   "name": "{owner}/{repo}",
+   "scope": "main:byteblaze - Dashboard",
+   "pre": [],
+   "successes": 4,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0",
+    "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0",
+    "2026-10-16_02-08-05_PathMemory-none_on_pathmemory.social-1_0",
+    "2026-10-16_02-33-45_PathMemory-none_on_pathmemory.explore-2_0"
+   ],
+   "dst": "/:owner/:repo"
+  },
+  {
+   "src": "/",
+   "eid": "e856ef9419b0",
+   "kind": "click",
+   "role": "link",
+   "name": "{owner}/{repo}#{n}",
+   "scope": "main:byteblaze - Dashboard",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-04-52_PathMemory-none_on_pathmemory.issues-3_0"
+   ],
+   "dst": "/:owner/:repo/issues/:n"
+  },
+  {
+   "src": "/",
+   "eid": "f9a67e94a5eb",
+   "kind": "click",
+   "role": "link",
+   "name": "Explore",
+   "scope": "navigation:Navigation Bar",
+   "pre": [],
+   "successes": 2,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-33-28_PathMemory-none_on_pathmemory.explore-1_0",
+    "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+   ],
+   "dst": "/explore/repos"
+  },
+  {
+   "src": "/",
+   "eid": "928aaf61760a",
+   "kind": "click",
+   "role": "link",
+   "name": "New Repository",
+   "scope": "main:byteblaze - Dashboard",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-06-21_PathMemory-none_on_pathmemory.repos-1_0"
+   ],
+   "dst": "/repo/create"
+  },
+  {
+   "src": "/",
+   "eid": "8caf8e249aee",
+   "kind": "click",
+   "role": "menuitem",
+   "name": "Settings",
+   "scope": "menu:Profile and Settings\u2026",
+   "pre": [
+    "menu|Profile and Settings\u2026|navigation:Navigation Bar"
+   ],
+   "successes": 2,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-05-25_PathMemory-none_on_pathmemory.profile-1_0",
+    "2026-10-16_02-05-53_PathMemory-none_on_pathmemory.profile-3_0"
+   ],
+   "dst": "/user/settings"
+  },
+  {
+   "src": "/:owner/:repo",
+   "eid": "e89632aa108f",
+   "kind": "click",
+   "role": "link",
+   "name": "Issues",
+   "scope": "navigation",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+   ],
+   "dst": "/:owner/:repo/issues"
+  },
+  {
+   "src": "/:owner/:repo",
+   "eid": "5a429a2293ad",
+   "kind": "click",
+   "role": "link",
+   "name": "Settings",
+   "scope": "navigation",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0"
+   ],
+   "dst": "/:owner/:repo/settings"
+  },
+  {
+   "src": "/:owner/:repo/issues",
+   "eid": "7ec9be2148de",
+   "kind": "click",
+   "role": "link",
+   "name": "New Issue",
+   "scope": "main:Issues",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+   ],
+   "dst": "/:owner/:repo/issues/new"
+  },
+  {
+   "src": "/:owner/:repo/settings",
+   "eid": "553337b98c73",
+   "kind": "click",
+   "role": "link",
+   "name": "Collaborators",
+   "scope": "main:Repository",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0"
+   ],
+   "dst": "/:owner/:repo/settings/collaboration"
+  },
+  {
+   "src": "/explore/repos",
+   "eid": "fc698e14a7f1",
+   "kind": "click",
+   "role": "link",
+   "name": "{repo}",
+   "scope": "main:Explore",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+   ],
+   "dst": "/:owner/:repo"
+  },
+  {
+   "src": "/user/settings",
+   "eid": "c7c606ac0dca",
+   "kind": "click",
+   "role": "link",
+   "name": "SSH / GPG Keys",
+   "scope": "main:Profile",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-05-53_PathMemory-none_on_pathmemory.profile-3_0"
+   ],
+   "dst": "/user/settings/keys"
+  }
+ ],
+ "worksites": [
+  {
+   "task": "explore-1",
+   "goal": "Open the Explore page that lists all repositories on this site.",
+   "cluster": "explore",
+   "steps": [],
+   "state": "/explore/repos"
+  },
+  {
+   "task": "explore-2",
+   "goal": "Browse the site's public repositories and open the primer/design repository.",
+   "cluster": "explore",
+   "steps": [],
+   "state": "/:owner/:repo"
+  },
+  {
+   "task": "explore-3",
+   "goal": "Using the Explore page's list of repositories (not the dashboard), open the a11yproject.com repository.",
+   "cluster": "explore",
+   "steps": [],
+   "state": "/:owner/:repo"
+  },
+  {
+   "task": "issues-1",
+   "goal": "Open an issue titled \"Improve focus outlines\" in the a11yproject.com repository.",
+   "cluster": "issues",
+   "steps": [
+    "fill textbox 'Title' = 'Improve focus outlines'",
+    "click button 'Create Issue'"
+   ],
+   "state": "/:owner/:repo/issues/new"
+  },
+  {
+   "task": "issues-3",
+   "goal": "Assign the issue \"Screen reader announces menu twice\" in a11yproject.com to bob.",
+   "cluster": "issues",
+   "steps": [
+    "click combobox ''",
+    "click option 'bob bob'"
+   ],
+   "state": "/:owner/:repo/issues/:n"
+  },
+  {
+   "task": "members-1",
+   "goal": "Add bob as a collaborator to my dotfiles repository.",
+   "cluster": "members",
+   "steps": [
+    "fill textbox 'Search users...' = 'bob'"
+   ],
+   "state": "/:owner/:repo/settings/collaboration"
+  },
+  {
+   "task": "profile-1",
+   "goal": "Set the website URL on my profile to https://byteblaze.dev",
+   "cluster": "profile",
+   "steps": [
+    "fill textbox 'Website' = 'https://byteblaze.dev'"
+   ],
+   "state": "/user/settings"
+  },
+  {
+   "task": "profile-3",
+   "goal": "Open the page where I can manage my SSH keys.",
+   "cluster": "profile",
+   "steps": [],
+   "state": "/user/settings/keys"
+  },
+  {
+   "task": "repos-1",
+   "goal": "Create a new public repository called \"hackathon-notes\".",
+   "cluster": "repos",
+   "steps": [
+    "fill textbox 'Repository Name *' = 'hackathon-notes'",
+    "click checkbox 'Make repository private'",
+    "click button 'Create Repository'"
+   ],
+   "state": "/repo/create"
+  },
+  {
+   "task": "social-1",
+   "goal": "Star the a11yproject.com repository.",
+   "cluster": "social",
+   "steps": [
+    "click button 'Star'"
+   ],
+   "state": "/:owner/:repo"
+  }
+ ]
+}
