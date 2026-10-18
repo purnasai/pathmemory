@@ -1,0 +1,13 @@
+Browser agents often spend model calls finding the same pages again. PathMemory remembers navigation steps in FalkorDB and combines them into routes for a new task. Here, the task is to create an issue in Gitea and assign it to Carol, after the usual dashboard link disappears.
+
+The graph stores page templates as states and learned clicks as action edges. Each edge records its target, landmark, outcome counts, and the training runs that taught it. The model chooses the destination. FalkorDB finds the route. BrowserGym executes the clicks, and PathMemory checks each landing page. The model handles the form.
+
+This Cypher query searches up to six hops, excludes steps that failed during this run, and prefers shorter routes. The normal route starts at the dashboard. With that link excluded, FalkorDB returns an alternative through Explore. Its first two steps came from one training run, and the remaining steps from another.
+
+Now watch the working project through a recorded browser run. The repository link is missing. Replay excludes that step and asks the graph again. The agent opens Explore, selects the repository, opens Issues, and reaches New Issue. Those four navigation clicks use remembered steps without additional model calls. Each landing page is checked against the expected template and chosen repository. The model then enters the issue title, selects Carol, and submits. The task checker confirms completion. No single training run contained this complete alternative route: the graph composed it from separate runs.
+
+To test that explanation, this copy of the graph has the Explore-to-repository bridge removed. The same query now returns no alternative route. This isolates the step needed for composition. The base model can still finish by navigating independently, but memory can no longer supply this route. The navigation-memory feature depends on FalkorDB.
+
+Across five trials of this broken-interface task, graph replay reached the target page five times; single-trajectory replay and the bridge ablation reached it zero times through memory. Every mode completed the task. Graph mode used six model calls instead of seven without memory, but it did not improve task success or demonstrated latency.
+
+This is a local, synthetic Gitea demonstration, with one model and one composition case. The public repository includes setup instructions, the graph model, queries, and evidence. PathMemory enters the connected-data agents and agent-memory tracks.

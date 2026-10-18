@@ -13,6 +13,7 @@ import os
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
+from pathmemory import prompts
 from pathmemory.service import InvalidArgument, PathMemoryService
 
 
@@ -33,13 +34,7 @@ def build(graph_name: str = "pathmemory") -> MCPServer:
     svc = PathMemoryService(graph_name)
     server = MCPServer(
         name="pathmemory",
-        instructions=(
-            "Procedural memory of a website (a Gitea instance), stored in FalkorDB as page templates "
-            "(e.g. /:owner/:repo/settings/collaboration) linked by verified navigation clicks. "
-            "Typical use: resolve_url for the current page, list_pages to pick a destination, find_route to get "
-            "the clicks, then report_failure for any click that no longer works and call find_route again with "
-            "that step in `avoid`. Placeholders like {repo} in click names are filled with the task's values."
-        ),
+        instructions=prompts.MCP_INSTRUCTIONS,
         log_level="ERROR",
     )
 

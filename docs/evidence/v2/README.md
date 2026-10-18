@@ -5,7 +5,7 @@ what makes it reproducible from a clone.
 
 ## P0: code-correctness checks (before any v2 evaluation)
 
-- `replaycheck.json`: `python -m pathmemory.replaycheck results`. Every click PathMemory replayed in the saved v1
+- `replaycheck.json`: `python -m pathmemory.evaluation.replaycheck results`. Every click PathMemory replayed in the saved v1
   runs (63) is looked up again with the new fail-closed `find_target()` on the page it was made on: 63/63 resolve to
   the same element, or to one with the same href. One page (the dashboard in `repos-5`) lists `primer/design` twice,
   with the same href; the v1 matcher picked the first, and the new one accepts it because both are the same link.

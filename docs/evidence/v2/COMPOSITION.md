@@ -34,7 +34,7 @@ fingerprint: [memory/manifest.json](memory/manifest.json). Graph `pathmemory_v2`
 ## The graph's decision
 
 Replay first asks FalkorDB for the shortest verified route from `/` to `/:owner/:repo/issues/new`
-([composition.json](composition.json), regenerate with `python -m pathmemory.composition`):
+([composition.json](composition.json), regenerate with `python -m pathmemory.evaluation.composition`):
 
 ```cypher
 MATCH (a:State {key:$src}), (b:State {key:$dst})
@@ -81,7 +81,7 @@ query with the dashboard step banned returns **no route**; without the ban it st
 
 ## Fail-closed checks in the real browser (no LLM)
 
-[probes.jsonl](probes.jsonl), `python -m pathmemory.probe`: scripted destination choice, real Gitea + Chromium,
+[probes.jsonl](probes.jsonl), `python -m pathmemory.evaluation.probe`: scripted destination choice, real Gitea + Chromium,
 v2 memory, base agent replaced by an immediate stop.
 
 - **wrong entity**: choice `owner=a11yproject, repo=design`. Dashboard has no such link → rerouted via Explore,

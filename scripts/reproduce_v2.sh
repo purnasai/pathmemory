@@ -4,13 +4,29 @@
 #   scripts/reproduce_v2.sh --with-llm # also one composed-route run and one ablated run (needs an OpenAI key,
 #                                      # about 2 minutes and $0.005 at gpt-6-luna list prices)
 set -euo pipefail
+if [[ $# -gt 1 || ( $# -eq 1 && "$1" != "--with-llm" ) ]]; then
+  echo "usage: $0 [--with-llm]" >&2
+  exit 2
+fi
 cd "$(dirname "$0")/.."
 step() { printf '\n== %s\n' "$*"; }
 
 step "1. services (FalkorDB :6391, Gitea :3300)"
-docker compose up -d
-until curl -fs http://localhost:3300/api/healthz >/dev/null; do sleep 1; done
-uv sync --quiet
+# Preserve an existing FalkorDB container's memory; fresh services use the pinned images.
+docker compose up -d --no-recreate
+ready=false
+for ((attempt=0; attempt<90; attempt++)); do
+  if curl --max-time 2 -fs http://localhost:3300/api/healthz >/dev/null; then
+    ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$ready" != true ]]; then
+  echo "Gitea did not become healthy; inspect docker compose logs gitea." >&2
+  exit 1
+fi
+uv sync --locked --quiet
 uv run playwright install chromium >/dev/null
 
 step "2. Gitea fixture: recreate, seed, compare with the declared state"

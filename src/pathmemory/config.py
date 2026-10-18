@@ -1,10 +1,10 @@
-"""Settings from the project .env, plus the OpenAI key file it points to."""
+"""Settings for a source checkout, optionally located through PATHMEMORY_ROOT."""
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(os.environ.get("PATHMEMORY_ROOT", Path(__file__).resolve().parents[2])).expanduser().resolve()
 
 
 def _load(path: Path) -> None:

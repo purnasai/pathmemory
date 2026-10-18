@@ -10,7 +10,7 @@ For every click PathMemory replayed in saved runs (graph or flatreplay mode), on
             ("unverifiable" when the stored landmark still has a placeholder: pre-p0 memory)
   dest      the next page has the stored destination template and agrees with the chosen entities
 
-    uv run python -m pathmemory.replaycheck --graph pathmemory_v1 results/v1 results/v1-repaired
+    uv run python -m pathmemory.evaluation.replaycheck --graph pathmemory_v1 results/v1 results/v1-repaired
 """
 
 import argparse
@@ -21,8 +21,18 @@ import pickle
 from pathlib import Path
 
 from pathmemory.graph import GraphMemory
-from pathmemory.state import (_name, _role, find_target, hrefs, instantiate, node_by_bid, norm_name, parse_action,
-                              scope_of, state_of)
+from pathmemory.state import (
+    _name,
+    _role,
+    find_target,
+    hrefs,
+    instantiate,
+    node_by_bid,
+    norm_name,
+    parse_action,
+    scope_of,
+    state_of,
+)
 
 CHECKED = ("owner", "repo", "org", "n")
 
@@ -68,17 +78,34 @@ def check_run(d: Path, memory: dict) -> list[dict]:
         obs_scope = scope_of(s.obs, node)
         m = find_target(s.obs, c["role"], name, "" if "{" in scope else scope)
         h = hrefs(s.obs)
-        row["matcher"] = "same_target" if m.ok and (m.bid == bid or h.get(m.bid) == h.get(bid) != None) else m.status
-        row["name"] = "match" if norm_name(_name(node)).lower() == norm_name(name).lower() else f"mismatch: {_name(node)!r}"
-        row["scope"] = ("unverifiable" if "{" in scope else
-                        "match" if scope.lower() == obs_scope.lower() else f"mismatch: stored {scope!r}, page {obs_scope!r}")
+        row["matcher"] = (
+            "same_target" if m.ok and (m.bid == bid or h.get(m.bid) == h.get(bid) is not None) else m.status
+        )
+        row["name"] = (
+            "match" if norm_name(_name(node)).lower() == norm_name(name).lower() else f"mismatch: {_name(node)!r}"
+        )
+        row["scope"] = (
+            "unverifiable"
+            if "{" in scope
+            else "match"
+            if scope.lower() == obs_scope.lower()
+            else f"mismatch: stored {scope!r}, page {obs_scope!r}"
+        )
         row["role"] = "match" if _role(node) == c["role"] else f"mismatch: {_role(node)}"
         if i + 1 < len(steps) and steps[i + 1].obs:
             nxt = state_of(steps[i + 1].obs)
-            bad = [k for k in CHECKED if chosen.get(k) and nxt.bindings.get(k) and
-                   chosen[k].lower() != nxt.bindings[k].lower()]
-            row["dest"] = ("match" if nxt.key.split("#")[0] == c["dst"] and not bad else
-                           f"mismatch: {nxt.key} {bad}" if not c["pre"] or nxt.key != st.key else "match")
+            bad = [
+                k
+                for k in CHECKED
+                if chosen.get(k) and nxt.bindings.get(k) and chosen[k].lower() != nxt.bindings[k].lower()
+            ]
+            row["dest"] = (
+                "match"
+                if nxt.key.split("#")[0] == c["dst"] and not bad
+                else f"mismatch: {nxt.key} {bad}"
+                if not c["pre"] or nxt.key != st.key
+                else "match"
+            )
         out.append(row)
     return out
 
@@ -90,12 +117,28 @@ def check(dirs: list[Path], graph: str) -> dict:
         for d in sorted(root.glob("**/*_on_pathmemory.*")):
             if (d / "summary_info.json").exists():
                 rows.extend(check_run(d, memory))
-    tally = {k: dict(collections.Counter(r.get(k, "n/a") if not str(r.get(k, "")).startswith("mismatch")
-                                         else "mismatch" for r in rows))
-             for k in ("matcher", "name", "scope", "role", "dest", "result")}
-    return {"graph": graph, "replayed_clicks": len(rows), "tally": tally,
-            "exceptions": [r for r in rows if r.get("result") or any(
-                str(r.get(k, "match")) not in ("match", "same_target") for k in ("matcher", "name", "scope", "role", "dest"))]}
+    tally = {
+        k: dict(
+            collections.Counter(
+                r.get(k, "n/a") if not str(r.get(k, "")).startswith("mismatch") else "mismatch" for r in rows
+            )
+        )
+        for k in ("matcher", "name", "scope", "role", "dest", "result")
+    }
+    return {
+        "graph": graph,
+        "replayed_clicks": len(rows),
+        "tally": tally,
+        "exceptions": [
+            r
+            for r in rows
+            if r.get("result")
+            or any(
+                str(r.get(k, "match")) not in ("match", "same_target")
+                for k in ("matcher", "name", "scope", "role", "dest")
+            )
+        ],
+    }
 
 
 if __name__ == "__main__":

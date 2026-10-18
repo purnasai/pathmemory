@@ -1,0 +1,205 @@
+"""Summarize eval/recovery JSONL: per-mode totals and the paired per-task table.
+
+    uv run python -m pathmemory.evaluation.report results/v1/eval.jsonl --select first
+    uv run python -m pathmemory.evaluation.report results/v1/eval.jsonl --select latest
+    uv run python -m pathmemory.evaluation.report results/v1/eval.jsonl --select both
+
+A JSONL file can hold several attempts of the same (task, mode) (a rerun appends). Which attempt is
+reported is always an explicit choice, every attempt stays listed, and attempts whose task definition
+differs (goal changed between runs) are flagged rather than pooled.
+"""
+
+import argparse
+import gzip
+import hashlib
+import json
+import pickle
+from collections import defaultdict
+from pathlib import Path
+
+from pathmemory.config import settings
+
+RESULTS = settings.root / "results"
+MODES = ["none", "flat", "flatreplay", "graph"]
+POLICIES = ("first", "latest")
+
+
+def definition(row) -> str | None:
+    """Task definition hash: recorded task_sha (schema 2), else a hash of the goal the run actually had."""
+    if row.get("task_sha"):
+        return row["task_sha"]
+    goal = goal_of(row)
+    return "goal:" + hashlib.sha256(goal.encode()).hexdigest()[:10] if goal else None
+
+
+def load_rows(path) -> list[dict]:
+    """Every observation in file order, annotated with its line, its task definition, and its attempt number
+    within (task, definition, mode). A task id that ran under several definitions is split into one
+    reporting unit per definition ("repos-5@<hash>"), so results of different tasks are never aggregated."""
+    rows = []
+    for line_no, line in enumerate(Path(path).read_text().splitlines(), 1):
+        if line.strip():
+            r = json.loads(line)
+            rows.append({**r, "_line": line_no, "_def": definition(r)})
+    defs = defaultdict(set)
+    for r in rows:
+        defs[r["task"]].add(r["_def"])
+    seen = defaultdict(int)
+    for r in rows:
+        r["_unit"] = r["task"] if len(defs[r["task"]]) == 1 else f"{r['task']}@{(r['_def'] or 'unknown')[-6:]}"
+        seen[(r["_unit"], r["mode"])] += 1
+        r["_attempt"] = seen[(r["_unit"], r["mode"])]
+    for r in rows:
+        r["_attempts"] = seen[(r["_unit"], r["mode"])]
+    return rows
+
+
+def select(rows: list[dict], policy: str) -> dict:
+    """{unit: {mode: row}} with one attempt per (task definition, mode), chosen by policy ("first" or "latest").
+    Attempts of different definitions are different units and are never chosen between."""
+    if policy not in POLICIES:
+        raise ValueError(f"policy must be one of {POLICIES}, got {policy!r}")
+    by = defaultdict(dict)
+    for r in rows:
+        if policy == "latest" or r["mode"] not in by[r["_unit"]]:
+            by[r["_unit"]][r["mode"]] = r
+    return dict(by)
+
+
+def goal_of(row) -> str | None:
+    """The goal the attempt actually ran with: recorded in the row (schema 2) or read from its run directory."""
+    if row.get("goal"):
+        return row["goal"]
+    f = RESULTS / rel_run_dir(row["exp_dir"]) / "goal_object.pkl.gz"
+    if not f.exists():
+        return None
+    goal = pickle.load(gzip.open(f))
+    text = next((m.get("text", "") for m in goal or [] if m.get("type") == "text"), "")
+    return text.split(" When you are done, send me")[0] or None
+
+
+def rel_run_dir(exp_dir: str) -> str:
+    """Saved rows hold absolute paths from wherever the run happened; keep the part under results/."""
+    parts = Path(exp_dir).parts
+    return str(Path(*parts[len(parts) - parts[::-1].index("results") :]))
+
+
+def duplicates(rows: list[dict]) -> list[dict]:
+    """Every (task, mode) with more than one attempt, all attempts listed, plus whether the task changed."""
+    groups = defaultdict(list)
+    for r in rows:
+        groups[(r["task"], r["mode"])].append(r)  # by id, so a definition change under one id is always shown
+    out = []
+    for (task, mode), rs in groups.items():
+        if len(rs) < 2:
+            continue
+        attempts = [
+            {
+                "attempt": r["_attempt"],
+                "unit": r["_unit"],
+                "line": r["_line"],
+                "success": r["success"],
+                "steps": r["steps"],
+                "definition": r["_def"],
+                "goal": goal_of(r),
+                "exp_dir": r["exp_dir"],
+            }
+            for r in rs
+        ]
+        ids = {a["definition"] for a in attempts}
+        out.append(
+            {
+                "task": task,
+                "mode": mode,
+                "attempts": attempts,
+                "same_definition": None if None in ids else len(ids) == 1,
+            }
+        )
+    return out
+
+
+def summarize(by):
+    out = {}
+    for m in MODES:
+        rs = [t[m] for t in by.values() if m in t]
+        if not rs:
+            continue
+        n = len(rs)
+        out[m] = {
+            "tasks": n,
+            "success": sum(r["success"] for r in rs),
+            "steps": round(sum(r["steps"] for r in rs) / n, 1),
+            # browser steps whose action came from the base LLM (not model calls; see model_calls)
+            "llm_steps": round(sum(r["llm_steps"] for r in rs) / n, 1),
+            "replayed": round(sum(r["replayed_steps"] for r in rs) / n, 1),
+            "input_tokens": round(sum(r["input_tokens"] for r in rs) / n),
+            "seconds": round(sum(r["seconds"] for r in rs) / n, 1),
+            "recovered": sum(r.get("recovered", False) for r in rs),
+        }
+        if all("model_calls" in r for r in rs):  # explicit counts exist only in schema-2 rows
+            out[m]["model_calls"] = round(sum(r["model_calls"] for r in rs) / n, 1)
+            out[m]["output_tokens"] = round(sum(r["output_tokens"] for r in rs) / n)
+    return out
+
+
+def print_table(by, policy):
+    s = summarize(by)
+    print(f"--- attempt selection: {policy} ---")
+    print(
+        f"{'mode':6} {'success':>9} {'steps':>6} {'LLM steps':>9} {'replayed':>8} {'model calls':>11} "
+        f"{'in tokens':>9} {'sec':>6}"
+    )
+    for m, v in s.items():
+        calls = v.get("model_calls", "n/a")
+        print(
+            f"{m:6} {v['success']:>4}/{v['tasks']:<4} {v['steps']:>6} {v['llm_steps']:>9} {v['replayed']:>8} "
+            f"{calls:>11} {v['input_tokens']:>9} {v['seconds']:>6}"
+        )
+    print()
+    print(f"{'task':11}" + "".join(f"{m:>18}" for m in MODES))
+    for task, t in by.items():
+        cells = []
+        for m in MODES:
+            r = t.get(m)
+            cells.append(f"{'OK ' if r['success'] else 'X  '}{r['steps']:>2}st {r['llm_steps']:>2}llm" if r else "-")
+        print(f"{task:11}" + "".join(f"{c:>18}" for c in cells))
+    print()
+    return s
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser()
+    p.add_argument("path")
+    p.add_argument(
+        "--select",
+        required=True,
+        choices=[*POLICIES, "both"],
+        help="which attempt to report when a (task, mode) was run more than once",
+    )
+    a = p.parse_args(argv)
+    rows = load_rows(a.path)
+    dups = duplicates(rows)
+    n_pairs = len({(r["task"], r["mode"]) for r in rows})
+    print(f"{len(rows)} observations, {n_pairs} (task, mode) pairs, {len(dups)} pairs with more than one attempt\n")
+    out = {}
+    for policy in POLICIES if a.select == "both" else [a.select]:
+        out[policy] = print_table(select(rows, policy), policy)
+    if dups:
+        print("--- repeated attempts (all observations kept) ---")
+        for d in dups:
+            same = {
+                True: "same task definition",
+                False: "TASK DEFINITION CHANGED between attempts",
+                None: "task definition not recorded",
+            }[d["same_definition"]]
+            print(f"{d['task']} / {d['mode']}: {same}")
+            for x in d["attempts"]:
+                print(
+                    f"   attempt {x['attempt']} (line {x['line']}): {'OK' if x['success'] else 'FAIL'} "
+                    f"{x['steps']} steps  goal={x['goal']!r}"
+                )
+    return out
+
+
+if __name__ == "__main__":
+    main()

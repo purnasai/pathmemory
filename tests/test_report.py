@@ -1,27 +1,36 @@
 """Repeated attempts of a (task, mode) are selected explicitly and never dropped silently."""
 
 import json
-from pathlib import Path
 
 import pytest
 
-from pathmemory import report
 from pathmemory.config import settings
+from pathmemory.evaluation import report
 
 
 def _rows(tmp_path, rows):
     p = tmp_path / "eval.jsonl"
-    base = {"steps": 2, "llm_steps": 2, "replayed_steps": 0, "input_tokens": 100, "seconds": 1.0, "exp_dir": "/r/results/x"}
+    base = {
+        "steps": 2,
+        "llm_steps": 2,
+        "replayed_steps": 0,
+        "input_tokens": 100,
+        "seconds": 1.0,
+        "exp_dir": "/r/results/x",
+    }
     p.write_text("".join(json.dumps({**base, **r}) + "\n" for r in rows))
     return p
 
 
 def test_first_and_latest_differ_and_both_are_visible(tmp_path):
-    p = _rows(tmp_path, [
-        {"task": "a", "mode": "graph", "success": True, "task_sha": "a1"},
-        {"task": "b", "mode": "graph", "success": False, "task_sha": "b1"},
-        {"task": "b", "mode": "graph", "success": True, "task_sha": "b1"},
-    ])
+    p = _rows(
+        tmp_path,
+        [
+            {"task": "a", "mode": "graph", "success": True, "task_sha": "a1"},
+            {"task": "b", "mode": "graph", "success": False, "task_sha": "b1"},
+            {"task": "b", "mode": "graph", "success": True, "task_sha": "b1"},
+        ],
+    )
     rows = report.load_rows(p)
     assert len(rows) == 3 and [r["_attempt"] for r in rows] == [1, 1, 2]
     first = report.summarize(report.select(rows, "first"))["graph"]
@@ -34,15 +43,18 @@ def test_first_and_latest_differ_and_both_are_visible(tmp_path):
 
 
 def test_different_definitions_under_one_id_are_never_pooled(tmp_path):
-    p = _rows(tmp_path, [
-        {"task": "b", "mode": "none", "success": False, "task_sha": "old"},
-        {"task": "b", "mode": "graph", "success": True, "task_sha": "new"},
-        {"task": "b", "mode": "none", "success": True, "task_sha": "new"},
-    ])
+    p = _rows(
+        tmp_path,
+        [
+            {"task": "b", "mode": "none", "success": False, "task_sha": "old"},
+            {"task": "b", "mode": "graph", "success": True, "task_sha": "new"},
+            {"task": "b", "mode": "none", "success": True, "task_sha": "new"},
+        ],
+    )
     rows = report.load_rows(p)
     for policy in ("first", "latest"):
         by = report.select(rows, policy)
-        assert set(by) == {"b@old", "b@new"}          # two units, whatever the policy
+        assert set(by) == {"b@old", "b@new"}  # two units, whatever the policy
         assert by["b@old"]["none"]["success"] is False and set(by["b@old"]) == {"none"}
         assert by["b@new"]["none"]["success"] is True
     [d] = report.duplicates(rows)
@@ -58,8 +70,13 @@ def test_selection_must_be_explicit(tmp_path):
 
 
 def test_cli_prints_every_repeated_attempt(tmp_path, capsys):
-    p = _rows(tmp_path, [{"task": "b", "mode": "none", "success": False, "goal": "count commits"},
-                         {"task": "b", "mode": "none", "success": True, "goal": "read description"}])
+    p = _rows(
+        tmp_path,
+        [
+            {"task": "b", "mode": "none", "success": False, "goal": "count commits"},
+            {"task": "b", "mode": "none", "success": True, "goal": "read description"},
+        ],
+    )
     out = report.main([str(p), "--select", "both"])
     text = capsys.readouterr().out
     for policy in ("first", "latest"):  # different goals = two reporting units, one failure and one success
@@ -75,7 +92,9 @@ V1 = settings.root / "docs/evidence/v1/eval.jsonl"
 def test_v1_repos5_rerun_was_a_different_task():
     rows = report.load_rows(V1)
     dups = report.duplicates(rows)
-    assert len(rows) == 45 and {(d["task"], d["mode"]) for d in dups} == {("repos-5", m) for m in ("none", "flat", "graph")}
+    assert len(rows) == 45 and {(d["task"], d["mode"]) for d in dups} == {
+        ("repos-5", m) for m in ("none", "flat", "graph")
+    }
     by = report.select(rows, "latest")
     assert len(by) == 15 and sum(k.startswith("repos-5@") for k in by) == 2  # never pooled under "repos-5"
     for d in dups:

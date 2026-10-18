@@ -4,8 +4,8 @@
 
 Watch an LLM browser agent work for a while and you notice something wasteful. Ask it to add a collaborator to a
 repository and it reasons its way to the repo, then to Settings, then to Collaborators. Ask it again for a
-different repo and it reasons the whole way again. Every one of those clicks is a model call. It never learns the
-site.
+different repo and it reasons the whole way again. In this agent configuration, each model-chosen action needs a completion. Repeated navigation
+therefore adds repeated model work.
 
 I wanted to see whether a graph database could fix that. The result is **PathMemory**: procedural memory for
 browser agents, stored in FalkorDB.
@@ -88,8 +88,8 @@ The code, results and a demo UI are at **https://github.com/purnasai/pathmemory*
 MCP server with six tools (`find_route`, `report_failure`, `record_step`, …), so any agent can ask it how to get
 somewhere.
 
-The takeaway I didn't expect: the useful unit of agent memory wasn't the trajectory, it was the *edge*. Store
-verified steps as a graph and routes compose themselves.
+For this case, storing individual navigation steps allowed the agent to compose a route that no
+training episode contained. Testing that behavior across more sites and tasks is the next step.
 
 ---
-*This project was built with an AI coding assistant (Claude Code). The author reviewed, tested and can explain every part: graph model, route query, replay and evaluation.*
+*Built with Claude Code assistance.*

@@ -31,6 +31,7 @@ from agentlab.agents.generic_agent.generic_agent import GenericAgentArgs
 from agentlab.llm.llm_utils import Discussion, HumanMessage, SystemMessage
 from agentlab.llm.tracking import cost_tracker_decorator, set_tracker
 
+from pathmemory import prompts
 from pathmemory.graph import GraphMemory
 from pathmemory.learn import FLAT_STORE
 from pathmemory.state import Match, find_target, hrefs, instantiate, semantic_step, state_of
@@ -40,6 +41,7 @@ from pathmemory.state import Match, find_target, hrefs, instantiate, semantic_st
 CHECKED_BINDINGS = ("owner", "repo", "org", "n")
 USAGE_ROLES = ("chooser", "base")
 REPLAY_MODES = ("graph", "flatreplay")
+
 
 def write_json(path, data):
     """Atomic write, so a reader polling the file never sees half of it."""
@@ -76,9 +78,9 @@ def flat_hint(goal: str, k: int = 3, store_path=FLAT_STORE, only: list[str] | No
         return None
     blocks = []
     for t in ranked:
-        lines = [f"  on {s['url']}: {s['action']}" for s in t["steps"]]
-        blocks.append(f"Past task: {t['goal']}\n" + "\n".join(lines))
-    return "Successful past trajectories on this website (use them if relevant):\n\n" + "\n\n".join(blocks)
+        lines = [prompts.FLAT_HINT_STEP.format(url=s["url"], action=s["action"]) for s in t["steps"]]
+        blocks.append(prompts.FLAT_HINT_TASK.format(goal=t["goal"]) + "\n".join(lines))
+    return prompts.FLAT_HINT_HEADER + "\n\n".join(blocks)
 
 
 class FlatRoutes:
@@ -117,35 +119,29 @@ class FlatRoutes:
                 for j in range(i, min(len(nav), i + max_hops)):
                     if j > i and nav[j]["src"] != nav[j - 1]["dst"]:
                         break  # the trajectory left the chain (e.g. a form submit moved the page)
-                    seg = nav[i:j + 1]
+                    seg = nav[i : j + 1]
                     if any(e["eid"] in banned for e in seg):
                         break
                     if nav[j]["dst"] == dst:
                         keys = [src] + [e["dst"] for e in seg]
-                        edges = [{"eid": e["eid"], "kind": "click", "role": e["role"], "name": e["name"],
-                                  "pre": e["pre"], "scope": e["scope"], "sources": [t["episode"]]} for e in seg]
+                        edges = [
+                            {
+                                "eid": e["eid"],
+                                "kind": "click",
+                                "role": e["role"],
+                                "name": e["name"],
+                                "pre": e["pre"],
+                                "scope": e["scope"],
+                                "sources": [t["episode"]],
+                            }
+                            for e in seg
+                        ]
                         found.setdefault(tuple(e["eid"] for e in seg), {"keys": keys, "edges": edges})
                         break
         return sorted(found.values(), key=lambda r: len(r["edges"]))[:k]
 
     def mark_failure(self, eid):
         raise RuntimeError("flat replay memory is read-only")
-
-
-CHOOSER_PROMPT = """You help a web agent reuse memory of a Gitea website.
-Goal: {goal}
-
-Current page: {url}
-Visible page text (truncated):
-{page}
-
-Known pages of this site (route templates), with tasks that were done there before:
-{sites}
-
-Pick the page where this goal's work should happen (or where the answer can be read), and the values
-for its placeholders (:owner = account or org owning a repo, :repo = repo name,
-:org = organisation). Use names exactly as they appear on the site. Reply with
-JSON only: {{"target": "<key or null>", "bindings": {{"owner": "...", "repo": "..."}}}}"""
 
 
 @dataclass
@@ -165,10 +161,16 @@ class PathMemoryAgentArgs(AgentArgs):
         self.agent_name = self.agent_name or f"PathMemory-{self.mode}"
 
     def make_agent(self):
-        return PathMemoryAgent(self.base_args.make_agent(), self.mode, self.graph_name,
-                               self.base_args.chat_model_args.make_model(), self.live_file,
-                               record_failures=self.record_failures, flat_store=self.flat_store,
-                               flat_only=self.flat_only)
+        return PathMemoryAgent(
+            self.base_args.make_agent(),
+            self.mode,
+            self.graph_name,
+            self.base_args.chat_model_args.make_model(),
+            self.live_file,
+            record_failures=self.record_failures,
+            flat_store=self.flat_store,
+            flat_only=self.flat_only,
+        )
 
     def set_benchmark(self, benchmark, demo_mode):
         self.base_args.set_benchmark(benchmark, demo_mode)
@@ -218,8 +220,18 @@ def _transient(err: str) -> bool:
 
 
 class PathMemoryAgent(bgym.Agent):
-    def __init__(self, base, mode, graph_name, chooser_llm, live_file=None, record_failures=False, flat_store=None,
-                 graph=None, flat_only=None):
+    def __init__(
+        self,
+        base,
+        mode,
+        graph_name,
+        chooser_llm,
+        live_file=None,
+        record_failures=False,
+        flat_store=None,
+        graph=None,
+        flat_only=None,
+    ):
         self.usage = _usage()  # per-episode model usage by role, see CountingLLM
         self.base, self.mode = base, mode
         self.llm = CountingLLM(chooser_llm, self.usage, "chooser")
@@ -278,20 +290,33 @@ class PathMemoryAgent(bgym.Agent):
     def _write_live(self, obs, action, info):
         st = state_of(obs)
         pm = (info.extra_info or {}).get("pathmemory") or {}
-        self.live_steps.append({"n": len(self.live_steps), "url": obs["url"], "page": st.key,
-                                "action": semantic_step(action, obs, st.bindings).text() if action else "",
-                                "source": pm.get("source", "llm"), "think": info.think or "",
-                                "error": obs.get("last_action_error") or ""})
-        write_json(self.live_file, {"status": "running", "mode": self.mode, "steps": self.live_steps,
-                                    "events": self.log})
+        self.live_steps.append(
+            {
+                "n": len(self.live_steps),
+                "url": obs["url"],
+                "page": st.key,
+                "action": semantic_step(action, obs, st.bindings).text() if action else "",
+                "source": pm.get("source", "llm"),
+                "think": info.think or "",
+                "error": obs.get("last_action_error") or "",
+            }
+        )
+        write_json(
+            self.live_file, {"status": "running", "mode": self.mode, "steps": self.live_steps, "events": self.log}
+        )
 
     def _act(self, obs):
         if not self.started:
             self.started = True
             if self.mode == "flat":
                 ctx = flat_context(self._goal(obs), store_path=self.flat_store, only=self.flat_only)
-                self.log.append({"event": "flat_context", "tasks": [t["task_id"] for t in ctx],
-                                 "pinned": self.flat_only is not None})
+                self.log.append(
+                    {
+                        "event": "flat_context",
+                        "tasks": [t["task_id"] for t in ctx],
+                        "pinned": self.flat_only is not None,
+                    }
+                )
                 self.hint = flat_hint(self._goal(obs), store_path=self.flat_store, only=self.flat_only)
             elif self.mode in REPLAY_MODES:
                 self._plan(obs)
@@ -306,7 +331,10 @@ class PathMemoryAgent(bgym.Agent):
             obs = dict(obs)
             obs["goal_object"] = list(obs["goal_object"]) + [{"type": "text", "text": "\n\n" + self.hint}]
         action, info = self.base.get_action(obs)
-        info.extra_info = {**(info.extra_info or {}), "pathmemory": {"source": "llm", "mode": self.mode, "log": list(self.log)}}
+        info.extra_info = {
+            **(info.extra_info or {}),
+            "pathmemory": {"source": "llm", "mode": self.mode, "log": list(self.log)},
+        }
         return action, info
 
     # --- graph mode -----------------------------------------------------------
@@ -317,17 +345,29 @@ class PathMemoryAgent(bgym.Agent):
         sites = self.graph.destinations()
         if not sites:
             return
-        listing = "\n".join(f"- key={s['key']}  (example page: {s['title']})"
-                            + (f"\n    done here: {'; '.join(s['goals'][:3])}" if s["goals"] else "") for s in sites)
-        prompt = CHOOSER_PROMPT.format(goal=self._goal(obs), url=obs["url"], sites=listing,
-                                       page=obs.get("axtree_txt", "")[:3000])
-        msg = self.llm(Discussion([SystemMessage("Reply with JSON only."), HumanMessage(prompt)]))
+        listing = "\n".join(
+            prompts.CHOOSER_SITE.format(key=s["key"], title=s["title"])
+            + (prompts.CHOOSER_SITE_DONE_HERE.format(goals="; ".join(s["goals"][:3])) if s["goals"] else "")
+            for s in sites
+        )
+        prompt = prompts.CHOOSER_PROMPT.format(
+            goal=self._goal(obs), url=obs["url"], sites=listing, page=obs.get("axtree_txt", "")[:3000]
+        )
+        msg = self.llm(Discussion([SystemMessage(prompts.CHOOSER_SYSTEM), HumanMessage(prompt)]))
         try:
             choice = json.loads(re.search(r"\{.*\}", msg["content"], re.S).group(0))
-        except (AttributeError, json.JSONDecodeError):
-            choice = {}
-        self.target = choice.get("target") if choice.get("target") in {s["key"] for s in sites} else None
-        self.bindings = {k: str(v) for k, v in (choice.get("bindings") or {}).items() if v}
+            target, bindings = choice.get("target"), choice.get("bindings")
+            if bindings is None:
+                bindings = {}
+            if target is not None and not isinstance(target, str):
+                raise ValueError("target must be a page key or null")
+            if not isinstance(bindings, dict) or any(not isinstance(value, str) for value in bindings.values()):
+                raise ValueError("bindings must map names to strings")
+        except (AttributeError, KeyError, TypeError, ValueError):
+            self.log.append({"event": "invalid_choice"})
+            return
+        self.target = target if target in {s["key"] for s in sites} else None
+        self.bindings = {k: v for k, v in bindings.items() if v}
         self.log.append({"event": "choose", "target": self.target, "bindings": self.bindings})
         if self.target:
             st = state_of(obs)
@@ -348,10 +388,24 @@ class PathMemoryAgent(bgym.Agent):
             for pre in e.get("pre") or []:
                 role, name, scope = (pre.split("|") + ["", ""])[:3]
                 self.queue.append({"role": role, "name": name, "scope": scope, "pre": True, "eid": e["eid"]})
-            self.queue.append({"role": e["role"], "name": e["name"], "scope": e.get("scope") or "", "pre": False,
-                               "eid": e["eid"], "dst": dst})
-        self.log.append({"event": "route", "keys": self.route["keys"], "eids": [e["eid"] for e in self.route["edges"]],
-                         "sources": [e.get("sources") for e in self.route["edges"]]})
+            self.queue.append(
+                {
+                    "role": e["role"],
+                    "name": e["name"],
+                    "scope": e.get("scope") or "",
+                    "pre": False,
+                    "eid": e["eid"],
+                    "dst": dst,
+                }
+            )
+        self.log.append(
+            {
+                "event": "route",
+                "keys": self.route["keys"],
+                "eids": [e["eid"] for e in self.route["edges"]],
+                "sources": [e.get("sources") for e in self.route["edges"]],
+            }
+        )
         return True
 
     def _fail(self, key, why, st=None):
@@ -361,8 +415,15 @@ class PathMemoryAgent(bgym.Agent):
             self.banned.append(self.last_eid)
             if self.record_failures:
                 self.graph.mark_failure(self.last_eid)
-        self.log.append({"event": "edge_failed", "eid": self.last_eid, "at": key, "why": why,
-                         "recorded": bool(self.last_eid and self.record_failures)})
+        self.log.append(
+            {
+                "event": "edge_failed",
+                "eid": self.last_eid,
+                "at": key,
+                "why": why,
+                "recorded": bool(self.last_eid and self.record_failures),
+            }
+        )
         self.expect, self.last_eid = None, None
         if self.recoveries < 2 and self._route_from(key, st):
             self.recoveries += 1
@@ -418,8 +479,14 @@ class PathMemoryAgent(bgym.Agent):
             self._fail(key, f"wrong entity: {bad}", st)
         elif self.expect:
             # landed where memory said, on the chosen entity: logged so the demo can show each check
-            self.log.append({"event": "verified", "page": key, "url": obs["url"],
-                             "entities": {k: v for k, v in st.bindings.items() if k in CHECKED_BINDINGS}})
+            self.log.append(
+                {
+                    "event": "verified",
+                    "page": key,
+                    "url": obs["url"],
+                    "entities": {k: v for k, v in st.bindings.items() if k in CHECKED_BINDINGS},
+                }
+            )
             self.expect, self.last_eid = None, None
         while self.queue:
             item = self.queue[0]
@@ -445,7 +512,9 @@ class PathMemoryAgent(bgym.Agent):
                 self.expect, self.last_eid, self.last_item = item["dst"], item["eid"], item
             return self._replayed(obs, f"click('{m.bid}')", item)
         if self.target and not self.hint:
-            self.hint = self._handover_hint(key, obs["url"], arrived=key == self.target and not self._binding_mismatch(st))
+            self.hint = self._handover_hint(
+                key, obs["url"], arrived=key == self.target and not self._binding_mismatch(st)
+            )
         return None
 
     def _replayed(self, obs, action, item):
@@ -457,8 +526,12 @@ class PathMemoryAgent(bgym.Agent):
         b.memories.append(None)
         b.thoughts.append(think)
         self.log.append({"event": "replay", "action": action, "target": item["name"]})
-        return action, bgym.AgentInfo(think=think, chat_messages=[], stats={},
-                                      extra_info={"pathmemory": {"source": "graph", "mode": self.mode, "log": list(self.log)}})
+        return action, bgym.AgentInfo(
+            think=think,
+            chat_messages=[],
+            stats={},
+            extra_info={"pathmemory": {"source": "graph", "mode": self.mode, "log": list(self.log)}},
+        )
 
     def _handover_hint(self, key, url, arrived):
         site = next((s for s in self.graph.destinations() if s["key"] == self.target), None)
@@ -467,16 +540,15 @@ class PathMemoryAgent(bgym.Agent):
         # Anchor to the concrete URL: after the agent acts, it may land on another page with the same template
         # (e.g. a fork at /byteblaze/design vs /primer/design) and must not mistake it for the starting point.
         if arrived:
-            lines = [f"Memory note: before your first action, PathMemory replayed known navigation to {url} "
-                     f"(page type {self.target}), where this kind of goal is usually done. "
-                     "Any page you see after that is the result of your own actions, so check whether the goal "
-                     "is already complete before repeating anything."]
+            lines = [prompts.HANDOVER_ARRIVED.format(url=url, target=self.target)]
         else:
-            lines = [f"Memory note: PathMemory tried to navigate to a page of type {self.target} but stopped at {url}. "
-                     "Continue from here yourself."]
+            lines = [prompts.HANDOVER_STOPPED.format(url=url, target=self.target)]
         if site["goals"]:
-            lines.append("Similar past tasks done on this page:")
+            lines.append(prompts.HANDOVER_SIMILAR)
         for goal, steps in zip(site["goals"], site["steps"]):
-            lines.append(f"- {goal}" + (f"  -> steps: {'; '.join(steps)}" if steps else ""))
-        lines.append("Treat this as guidance: check the current page and complete the goal yourself.")
+            lines.append(
+                prompts.HANDOVER_TASK.format(goal=goal)
+                + (prompts.HANDOVER_TASK_STEPS.format(steps="; ".join(steps)) if steps else "")
+            )
+        lines.append(prompts.HANDOVER_FOOTER)
         return "\n".join(lines)

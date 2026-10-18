@@ -15,8 +15,25 @@ from dataclasses import dataclass, field
 from urllib.parse import parse_qsl, urlsplit
 
 # Gitea top-level paths that are not an owner name.
-RESERVED = {"", "user", "explore", "org", "repo", "admin", "notifications", "issues", "pulls", "milestones",
-            "api", "assets", "avatars", "-", "login", "swagger", "attachments"}
+RESERVED = {
+    "",
+    "user",
+    "explore",
+    "org",
+    "repo",
+    "admin",
+    "notifications",
+    "issues",
+    "pulls",
+    "milestones",
+    "api",
+    "assets",
+    "avatars",
+    "-",
+    "login",
+    "swagger",
+    "attachments",
+}
 # Query parameters that change what the page *is* (kept); everything else is noise.
 FUNCTIONAL_PARAMS = {"state", "type", "tab"}
 # Segments after which the rest of the path is a git ref / file path.
@@ -184,7 +201,11 @@ def semantic_step(action: str, obs_before, bindings: dict, scope_bindings: dict 
         node = node_by_bid(obs_before, args[0])
         role, name = (_role(node), _name(node)) if node else ("", "")
         value = args[1] if kind in ("fill", "select_option") and len(args) > 1 else ""
-        scope = templatize(scope_of(obs_before, node), bindings if scope_bindings is None else scope_bindings) if node else ""
+        scope = (
+            templatize(scope_of(obs_before, node), bindings if scope_bindings is None else scope_bindings)
+            if node
+            else ""
+        )
         return Step(kind, role, templatize(norm_name(name), bindings)[:120], templatize(value, bindings)[:120], scope)
     return Step(kind, value=(args[0][:120] if args else ""))
 
@@ -227,8 +248,9 @@ def find_target(obs, role: str, name: str, scope: str = "") -> Match:
     """
     props = obs.get("extra_element_properties") or {}
     want = norm_name(name).lower()
-    nodes = [n for n in _nodes(obs)
-             if n.get("browsergym_id") and _role(n) == role and norm_name(_name(n)).lower() == want]
+    nodes = [
+        n for n in _nodes(obs) if n.get("browsergym_id") and _role(n) == role and norm_name(_name(n)).lower() == want
+    ]
     if not nodes:
         return Match("missing")
     if scope:

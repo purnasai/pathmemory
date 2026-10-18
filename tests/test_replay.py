@@ -1,19 +1,27 @@
 """Semantic replay fails closed: it clicks only a visible, unambiguous element in the remembered landmark,
 and only keeps going while the pages it reaches are about the entity that was chosen."""
 
+from pmfakes import FakeBase, FakeChat, FakeGraph, page
+
 from pathmemory.agent import PathMemoryAgent
 from pathmemory.graph import edge_id
 from pathmemory.state import Step, find_target
-from pmfakes import FakeBase, FakeChat, FakeGraph, page
 
 HOME = "http://x/"
 
 
 def _agent(edges, target, bindings, record_failures=False):
     import json
+
     choice = json.dumps({"target": target, "bindings": bindings})
-    return PathMemoryAgent(FakeBase(FakeChat([])), "graph", "unused", FakeChat([choice]),
-                           record_failures=record_failures, graph=FakeGraph(edges, [target]))
+    return PathMemoryAgent(
+        FakeBase(FakeChat([])),
+        "graph",
+        "unused",
+        FakeChat([choice]),
+        record_failures=record_failures,
+        graph=FakeGraph(edges, [target]),
+    )
 
 
 def _events(agent, kind):
@@ -40,15 +48,25 @@ def test_remembered_scope_is_not_widened():
 
 
 def test_same_name_different_targets_is_ambiguous():
-    obs = page(HOME, [("1", "link", "design", "main", True, "/primer/design"),
-                      ("2", "link", "design", "main", True, "/byteblaze/design")])
+    obs = page(
+        HOME,
+        [
+            ("1", "link", "design", "main", True, "/primer/design"),
+            ("2", "link", "design", "main", True, "/byteblaze/design"),
+        ],
+    )
     assert find_target(obs, "link", "design", scope="main").status == "ambiguous"
 
 
 def test_same_link_listed_twice_is_one_target():
     # the v1 dashboard lists primer/design twice (feed + repo list), both to /primer/design
-    obs = page(HOME, [("163", "link", "primer/design", "main", True, "/primer/design"),
-                      ("358", "link", "primer/design", "main", True, "/primer/design")])
+    obs = page(
+        HOME,
+        [
+            ("163", "link", "primer/design", "main", True, "/primer/design"),
+            ("358", "link", "primer/design", "main", True, "/primer/design"),
+        ],
+    )
     assert find_target(obs, "link", "primer/design", scope="main").bid == "163"
 
 
@@ -79,9 +97,14 @@ def test_invisible_target_abandons_replay_instead_of_clicking():
 
 def test_ambiguous_target_reroutes_via_alternative():
     agent = _agent([REPO_EDGE, EXPLORE_EDGE, EXPLORE_REPO], "/:owner/:repo", PRIMER)
-    home = page(HOME, [("5", "link", "primer/design", "main", True, "/primer/design"),
-                       ("6", "link", "primer/design", "main", True, "/primer/design/issues"),
-                       ("7", "link", "Explore", "navigation:Navigation Bar", True, "/explore/repos")])
+    home = page(
+        HOME,
+        [
+            ("5", "link", "primer/design", "main", True, "/primer/design"),
+            ("6", "link", "primer/design", "main", True, "/primer/design/issues"),
+            ("7", "link", "Explore", "navigation:Navigation Bar", True, "/explore/repos"),
+        ],
+    )
     action, _ = agent.get_action(home)
     assert action == "click('7')" and "ambiguous" in _events(agent, "edge_failed")[0]["why"]
     assert agent.banned == ["e-dash"]
@@ -114,10 +137,21 @@ def test_navigation_toward_a_resource_that_does_not_exist_yet_is_allowed():
     # creating "secret-plans": the chosen repo is not in any URL on the way to /repo/create
     edges = [("/", "/repo/create", "menuitem", "New Repository", "", ["button|Create…|"], "e-new")]
     agent = _agent(edges, "/repo/create", {"owner": "byteblaze", "repo": "secret-plans"})
-    a0, _ = agent.get_action(page(HOME, [("3", "button", "Create…", "", True, None),
-                                         ("4", "menuitem", "New Repository", "", False, "/repo/create")]))
-    a1, _ = agent.get_action(page(HOME, [("3", "button", "Create…", "", True, None),
-                                         ("4", "menuitem", "New Repository", "", True, "/repo/create")]))
+    a0, _ = agent.get_action(
+        page(
+            HOME,
+            [
+                ("3", "button", "Create…", "", True, None),
+                ("4", "menuitem", "New Repository", "", False, "/repo/create"),
+            ],
+        )
+    )
+    a1, _ = agent.get_action(
+        page(
+            HOME,
+            [("3", "button", "Create…", "", True, None), ("4", "menuitem", "New Repository", "", True, "/repo/create")],
+        )
+    )
     agent.get_action(page("http://x/repo/create"))
     assert (a0, a1) == ("click('3')", "click('4')") and not _events(agent, "edge_failed")
 
@@ -144,6 +178,7 @@ def test_unbound_placeholder_is_not_clicked():
 
 def test_landmark_is_templated_with_the_page_it_is_on_not_the_destination():
     from pathmemory.state import semantic_step
+
     home = page(HOME, [("5", "link", "byteblaze/dotfiles", "main:byteblaze - Dashboard", True, "/byteblaze/dotfiles")])
     dst = {"owner": "byteblaze", "repo": "dotfiles"}
     step = semantic_step("click('5')", home, dst, scope_bindings={})
@@ -153,18 +188,40 @@ def test_landmark_is_templated_with_the_page_it_is_on_not_the_destination():
 def test_legacy_over_templated_scope_still_requires_a_unique_visible_target():
     legacy = ("/", "/:owner/:repo", "link", "{owner}/{repo}", "main:{owner} - Dashboard", [], "e-dash")
     agent = _agent([legacy], "/:owner/:repo", {"owner": "a11yproject", "repo": "a11yproject.com"})
-    a, _ = agent.get_action(page(HOME, [("5", "link", "a11yproject/a11yproject.com", "main:byteblaze - Dashboard",
-                                         True, "/a11yproject/a11yproject.com")]))
+    a, _ = agent.get_action(
+        page(
+            HOME,
+            [
+                (
+                    "5",
+                    "link",
+                    "a11yproject/a11yproject.com",
+                    "main:byteblaze - Dashboard",
+                    True,
+                    "/a11yproject/a11yproject.com",
+                )
+            ],
+        )
+    )
     assert a == "click('5')" and _events(agent, "scope_unverifiable")
     agent = _agent([legacy], "/:owner/:repo", {"owner": "a11yproject", "repo": "a11yproject.com"})
-    _, info = agent.get_action(page(HOME, [("5", "link", "a11yproject/a11yproject.com", "main:x", True, "/a"),
-                                           ("6", "link", "a11yproject/a11yproject.com", "main:y", True, "/b")]))
+    _, info = agent.get_action(
+        page(
+            HOME,
+            [
+                ("5", "link", "a11yproject/a11yproject.com", "main:x", True, "/a"),
+                ("6", "link", "a11yproject/a11yproject.com", "main:y", True, "/b"),
+            ],
+        )
+    )
     assert info.extra_info["pathmemory"]["source"] == "llm" and "ambiguous" in _events(agent, "edge_failed")[0]["why"]
 
 
 def test_link_to_another_entity_is_refused_before_clicking():
     agent = _agent([EXPLORE_EDGE, EXPLORE_REPO], "/:owner/:repo", {"owner": "a11yproject", "repo": "design"})
     agent.get_action(page(HOME, [("7", "link", "Explore", "navigation:Navigation Bar", True, "/explore/repos")]))
-    a, info = agent.get_action(page("http://x/explore/repos", [("9", "link", "design", "main", True, "/primer/design")]))
+    a, info = agent.get_action(
+        page("http://x/explore/repos", [("9", "link", "design", "main", True, "/primer/design")])
+    )
     assert info.extra_info["pathmemory"]["source"] == "llm" and a != "click('9')"
     assert _events(agent, "edge_failed")[0]["why"].endswith("wrong_entity")

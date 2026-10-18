@@ -12,7 +12,7 @@ model when it cannot parse an answer. This derives the counts from the saved ste
                    only model call in that step). If step 0 was an LLM step, AgentLab stored only the sum of the
                    chooser and base call, so the split is reported as null, not estimated.
 
-    uv run python -m pathmemory.accounting docs/evidence/v1/eval.jsonl > docs/evidence/v1-derived/eval.accounting.jsonl
+    uv run python -m pathmemory.evaluation.accounting docs/evidence/v1/eval.jsonl > docs/evidence/v1-derived/eval.accounting.jsonl
 """
 
 import gzip
@@ -21,7 +21,7 @@ import pickle
 import sys
 from pathlib import Path
 
-from pathmemory.report import RESULTS, goal_of, load_rows, rel_run_dir
+from pathmemory.evaluation.report import RESULTS, goal_of, load_rows, rel_run_dir
 
 
 def _role(m):
@@ -45,15 +45,23 @@ def derive(exp_dir: Path) -> dict:
     chooser_calls = int(any(e.get("event") == "choose" for e in log))
     total_in = int(summary.get("stats.cum_input_tokens") or 0)
     total_out = int(summary.get("stats.cum_output_tokens") or 0)
-    out = {"chooser_calls": chooser_calls, "base_calls": base_calls, "model_calls": chooser_calls + base_calls,
-           "input_tokens": total_in, "output_tokens": total_out,
-           "chooser_input_tokens": 0 if not chooser_calls else None,
-           "chooser_output_tokens": 0 if not chooser_calls else None, "chooser_tokens_source": None}
+    out = {
+        "chooser_calls": chooser_calls,
+        "base_calls": base_calls,
+        "model_calls": chooser_calls + base_calls,
+        "input_tokens": total_in,
+        "output_tokens": total_out,
+        "chooser_input_tokens": 0 if not chooser_calls else None,
+        "chooser_output_tokens": 0 if not chooser_calls else None,
+        "chooser_tokens_source": None,
+    }
     if chooser_calls and sources and sources[0] == "graph":
         st = (steps[0].agent_info or {}).get("stats") or {}
-        out.update(chooser_input_tokens=int(st.get("input_tokens") or 0),
-                   chooser_output_tokens=int(st.get("output_tokens") or 0),
-                   chooser_tokens_source="step 0 stats (replayed step: chooser was the only call)")
+        out.update(
+            chooser_input_tokens=int(st.get("input_tokens") or 0),
+            chooser_output_tokens=int(st.get("output_tokens") or 0),
+            chooser_tokens_source="step 0 stats (replayed step: chooser was the only call)",
+        )
     elif chooser_calls:
         out["chooser_tokens_source"] = "unavailable: chooser and base call in the same step, only their sum was saved"
     if out["chooser_input_tokens"] is not None:
@@ -68,10 +76,21 @@ def derive_file(path) -> list[dict]:
     rows = []
     for r in load_rows(path):
         d = RESULTS / rel_run_dir(r["exp_dir"])
-        row = {"line": r["_line"], "attempt": r["_attempt"], "attempts": r["_attempts"], "task": r["task"],
-               "mode": r["mode"], "goal": goal_of(r), "success": r["success"], "steps": r["steps"],
-               "llm_steps": r["llm_steps"], "replayed_steps": r["replayed_steps"], "seconds": r["seconds"],
-               "reported_input_tokens": r["input_tokens"], "exp_dir": rel_run_dir(r["exp_dir"])}
+        row = {
+            "line": r["_line"],
+            "attempt": r["_attempt"],
+            "attempts": r["_attempts"],
+            "task": r["task"],
+            "mode": r["mode"],
+            "goal": goal_of(r),
+            "success": r["success"],
+            "steps": r["steps"],
+            "llm_steps": r["llm_steps"],
+            "replayed_steps": r["replayed_steps"],
+            "seconds": r["seconds"],
+            "reported_input_tokens": r["input_tokens"],
+            "exp_dir": rel_run_dir(r["exp_dir"]),
+        }
         if (d / "summary_info.json").exists():
             row.update(derive(d))
             row["tokens_match_row"] = row["input_tokens"] == r["input_tokens"]

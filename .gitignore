@@ -3,6 +3,9 @@
 __pycache__/
 results/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+dist/
 
 .archify/
 requirements-frozen-*.txt

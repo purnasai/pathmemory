@@ -7,7 +7,7 @@ import pytest
 
 from pathmemory.agent import FlatRoutes
 from pathmemory.config import settings
-from pathmemory.run import RECOVERY, TEST
+from pathmemory.evaluation.run import RECOVERY, TEST
 
 V2 = settings.root / "docs/evidence/v2"
 COMP = json.loads((V2 / "composition.json").read_text())
@@ -15,12 +15,21 @@ MANIFEST = json.loads((V2 / "memory/manifest.json").read_text())
 FLAT = FlatRoutes(V2 / "memory/flat_memory.json")
 
 
+def test_saved_probe_arguments_keep_their_original_module_path():
+    import pickle
+
+    from pathmemory.evaluation.probe import ProbeAgentArgs
+
+    # Protocol-0 GLOBAL references the class path used by historical experiment files.
+    assert pickle.loads(b"cpathmemory.probe\nProbeAgentArgs\n.") is ProbeAgentArgs
+
+
 def test_composed_route_is_absent_from_every_individual_training_episode():
     eids = COMP["composed_route"]["eids"]
     assert len(FLAT.store) == sum(e["success"] for e in MANIFEST["episodes"])  # every ingested episode checked
     for t in FLAT.store:
         seq = [e["eid"] for e in t["nav"]]
-        assert not any(seq[i:i + len(eids)] == eids for i in range(len(seq))), t["episode"]
+        assert not any(seq[i : i + len(eids)] == eids for i in range(len(seq))), t["episode"]
         assert not set(eids) <= set(seq), t["episode"]
 
 
@@ -43,10 +52,24 @@ def test_flat_replay_cannot_produce_the_route_but_finds_the_single_episode_one()
 
 
 def test_flat_routes_never_join_two_trajectories(tmp_path):
-    store = [{"task_id": "a", "goal": "a", "steps": [], "episode": "A", "worksite": None,
-              "nav": [{"eid": "1", "src": "/", "dst": "/x", "role": "link", "name": "X", "scope": "", "pre": []}]},
-             {"task_id": "b", "goal": "b", "steps": [], "episode": "B", "worksite": "/y",
-              "nav": [{"eid": "2", "src": "/x", "dst": "/y", "role": "link", "name": "Y", "scope": "", "pre": []}]}]
+    store = [
+        {
+            "task_id": "a",
+            "goal": "a",
+            "steps": [],
+            "episode": "A",
+            "worksite": None,
+            "nav": [{"eid": "1", "src": "/", "dst": "/x", "role": "link", "name": "X", "scope": "", "pre": []}],
+        },
+        {
+            "task_id": "b",
+            "goal": "b",
+            "steps": [],
+            "episode": "B",
+            "worksite": "/y",
+            "nav": [{"eid": "2", "src": "/x", "dst": "/y", "role": "link", "name": "Y", "scope": "", "pre": []}],
+        },
+    ]
     p = tmp_path / "flat.json"
     p.write_text(json.dumps(store))
     f = FlatRoutes(p)
@@ -70,8 +93,9 @@ def test_ablation_removes_the_route():
 @pytest.mark.integration
 @pytest.mark.falkordb
 def test_live_cypher_matches_committed_evidence():
-    from pathmemory.composition import evidence
+    from pathmemory.evaluation.composition import evidence
     from pathmemory.graph import GraphMemory
+
     if "pathmemory_v2" not in GraphMemory("pathmemory_v2").db.list_graphs():
         pytest.skip("BLOCKED: v2 graph not loaded (run build-memory)")
     live = evidence()
@@ -85,6 +109,7 @@ def test_live_cypher_matches_committed_evidence():
 def test_build_memory_refuses_held_out_and_redefined_episodes():
     from pathmemory.graph import GraphMemory
     from pathmemory.learn import build_memory
+
     g = GraphMemory("pm_test_build")
     test_run = next((settings.root / "results/v1/eval").glob("*members-2_0"))
     with pytest.raises(ValueError, match="held-out"):
@@ -100,8 +125,12 @@ def test_flat_prompt_context_audit():
     """What flat mode's top-3 retrieval gives for issues-2, and that pinning gives exactly the named trajectories."""
     from pathmemory.agent import flat_context
     from pathmemory.site.tasks import TASKS_BY_ID
+
     store = V2 / "memory/flat_memory.json"
-    goal = TASKS_BY_ID["issues-2"].goal + " When you are done, send me a short message (include the answer if I asked a question)."
+    goal = (
+        TASKS_BY_ID["issues-2"].goal
+        + " When you are done, send me a short message (include the answer if I asked a question)."
+    )
     top = [t["task_id"] for t in flat_context(goal, store_path=store)]  # the goal text the agent ranks with
     assert top == ["repos-1", "issues-3", "explore-2"]  # neither explore-3 nor issues-1: see FAIR_COMPARISON.md
     pinned = [t["task_id"] for t in flat_context("x", store_path=store, only=["explore-1", "explore-3", "issues-1"])]
@@ -112,6 +141,7 @@ def test_flat_prompt_context_audit():
 @pytest.mark.falkordb
 def test_committed_dump_reloads_to_the_manifest_fingerprint():
     from pathmemory.graph import GraphMemory
+
     g = GraphMemory("pm_test_dump")
     dump = json.loads((V2 / "memory/graph_v2.json").read_text())
     assert g.load_dump(dump) == dump["fingerprint"] == MANIFEST["fingerprint"]

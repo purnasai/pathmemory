@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PathMemory</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header>
+  <h1>PathMemory</h1>
+  <span class="tag">Remember the steps. Find another route.</span>
+  <label class="muted" style="margin-left:auto">memory
+    <select id="mem"><option value="v2">Training memory (v2)</option><option value="v2-ablated">Bridge removed (v2)</option><option value="v1">Historical memory (v1)</option></select></label>
+  <div class="chips" id="chips" style="margin-left:0"></div>
+</header>
+<main>
+  <div id="graphwrap">
+    <div id="cy"></div>
+    <div id="edgeinfo"></div>
+    <div class="legend">
+      <div><i style="background:#56606e"></i>learned step (thicker = more successes)</div>
+      <div><i style="background:var(--graph)"></i>route used in this run</div>
+      <div><i style="background:var(--fail)"></i>step that failed in this run</div>
+      <div><i style="background:var(--accent)"></i>current page</div>
+      <div><i style="background:var(--warn)"></i>written by the last live run</div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="tabs">
+      <button data-tab="v2" class="on">Walkthrough</button>
+      <button data-tab="run">Recorded runs</button>
+      <button data-tab="results">Results</button>
+      <button data-tab="query">Route query</button>
+      <button data-tab="live">Live run</button>
+    </div>
+    <div class="pane on" id="v2"><div id="v2view">Loading the walkthrough…</div></div>
+    <div class="pane" id="run">
+      <div class="row">
+        <select id="exp"></select><select id="task"></select><select id="mode"></select>
+      </div>
+      <div id="runview" class="muted">Pick a run.</div>
+    </div>
+    <div class="pane" id="results"></div>
+    <div class="pane" id="query">
+      <div class="row"><span class="muted">from</span><select id="qsrc"></select><span class="muted">to</span><select id="qdst"></select></div>
+      <div class="muted" style="font-size:12px;margin-bottom:4px">Pretend these steps are broken (FalkorDB must route around them):</div>
+      <div class="avoid" id="avoid"></div>
+      <div class="routes" id="qroutes"></div>
+      <details><summary class="muted">Cypher</summary><pre id="qcypher"></pre></details>
+    </div>
+    <div class="pane" id="live">
+      <div class="row"><select id="ltask"></select><select id="lmode"><option value="graph">graph memory</option><option value="flat">flat memory</option><option value="none">no memory</option></select>
+        <select id="lmem"><option value="v2">replay from v2 (read-only copy)</option><option value="v2-ablated">replay from v2 ablated (read-only copy)</option><option value="v1">v1 demo memory (can learn)</option></select></div>
+      <div class="row"><label><input type="checkbox" id="lbreak" checked> break the UI (hide the dashboard's repo links)</label></div>
+      <div class="row"><label><input type="checkbox" id="llearn"> learn (v1 memory only): if the run succeeds, write its verified steps to FalkorDB</label></div>
+      <div class="row"><button id="lgo" class="go">Run in a visible browser</button><button id="lreset" class="plain">Reset memory to v1</button><span id="lstatus" class="muted"></span></div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px"><span class="live">LIVE</span>A Chromium window opens on this machine and does the task now, slowed down so each click is visible; the model is called for real. With v2 memory the Gitea fixture is reset first (about 10 s) and the snapshot is checked unchanged afterwards.</div>
+      <div id="lview"></div>
+    </div>
+  </div>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

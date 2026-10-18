@@ -5,23 +5,30 @@ import json
 
 import pytest
 import requests
+from pmfakes import FakeBase, FakeChat, FakeGraph, page
 
 from pathmemory.agent import PathMemoryAgent
 from pathmemory.graph import GraphMemory, edge_id
 from pathmemory.state import State, Step
-from pmfakes import FakeBase, FakeChat, FakeGraph, page
 
-HOME, REPO, EXPLORE = State("/", "/"), State("/:owner/:repo", "/:owner/:repo"), State("/explore/repos", "/explore/repos")
+HOME, REPO, EXPLORE = (
+    State("/", "/"),
+    State("/:owner/:repo", "/:owner/:repo"),
+    State("/explore/repos", "/explore/repos"),
+)
 CHOICE = json.dumps({"target": "/:owner/:repo", "bindings": {"owner": "primer", "repo": "design"}})
-EDGES = [("/", "/:owner/:repo", "link", "{owner}/{repo}", "main", [], "e-dash"),
-         ("/", "/explore/repos", "link", "Explore", "", [], "e-explore"),
-         ("/explore/repos", "/:owner/:repo", "link", "{repo}", "main", [], "e-list")]
+EDGES = [
+    ("/", "/:owner/:repo", "link", "{owner}/{repo}", "main", [], "e-dash"),
+    ("/", "/explore/repos", "link", "Explore", "", [], "e-explore"),
+    ("/explore/repos", "/:owner/:repo", "link", "{repo}", "main", [], "e-list"),
+]
 BROKEN_HOME = page("http://x/", [("7", "link", "Explore", "", True, "/explore/repos")])  # dashboard links hidden
 
 
 def _run(graph, record_failures):
-    agent = PathMemoryAgent(FakeBase(FakeChat([])), "graph", "unused", FakeChat([CHOICE]),
-                            record_failures=record_failures, graph=graph)
+    agent = PathMemoryAgent(
+        FakeBase(FakeChat([])), "graph", "unused", FakeChat([CHOICE]), record_failures=record_failures, graph=graph
+    )
     action, _ = agent.get_action(BROKEN_HOME)
     return agent, action
 
@@ -29,8 +36,8 @@ def _run(graph, record_failures):
 def test_eval_bans_and_reroutes_without_writing():
     g = FakeGraph(EDGES, ["/:owner/:repo"])
     agent, action = _run(g, record_failures=False)
-    assert action == "click('7')" and agent.banned == ["e-dash"]   # rerouted via Explore within the run
-    assert g.failures == []                                          # memory untouched
+    assert action == "click('7')" and agent.banned == ["e-dash"]  # rerouted via Explore within the run
+    assert g.failures == []  # memory untouched
     assert agent.log[1]["event"] == "route" and not [e for e in agent.log if e.get("recorded")]
 
 
@@ -42,6 +49,7 @@ def test_live_learning_records_the_failure():
 
 def test_agent_args_default_to_not_recording():
     from pathmemory.agent import PathMemoryAgentArgs
+
     assert PathMemoryAgentArgs(mode="graph").record_failures is False
 
 
@@ -66,16 +74,16 @@ def test_each_trial_starts_from_the_same_snapshot_and_eval_leaves_it_unchanged()
     fp = snap.fingerprint()
     work = GraphMemory(WORK)
     seen = []
-    for record in (False, False, True):        # two evaluation trials, then one live-learning run
+    for record in (False, False, True):  # two evaluation trials, then one live-learning run
         work.restore(SNAP)
         seen.append(work.fingerprint())
         _run(work, record_failures=record)
         seen.append(work.fingerprint())
-    assert seen[0] == seen[1] == seen[2] == seen[3] == seen[4] == fp   # eval trials wrote nothing
-    assert seen[5] != fp                                                 # live learning did write
-    assert snap.fingerprint() == fp                                      # snapshot itself never touched
+    assert seen[0] == seen[1] == seen[2] == seen[3] == seen[4] == fp  # eval trials wrote nothing
+    assert seen[5] != fp  # live learning did write
+    assert snap.fingerprint() == fp  # snapshot itself never touched
     work.restore(SNAP)
-    assert work.fingerprint() == fp                                      # and the next trial is clean again
+    assert work.fingerprint() == fp  # and the next trial is clean again
     for n in (SNAP, WORK):
         GraphMemory(n).clear()
 
@@ -98,10 +106,10 @@ def test_v1_edge_ids_migrate_to_scoped_ids():
 @pytest.mark.gitea
 def test_reset_removes_earlier_task_effects():
     from pathmemory.config import settings
-    from pathmemory.run import reset_site
+    from pathmemory.evaluation.run import reset_site
     from pathmemory.site.seed import ADMIN, fingerprint
 
     clean = reset_site()
     r = requests.put(f"{settings.gitea_url}/api/v1/user/starred/primer/design", auth=ADMIN, timeout=10)
-    assert r.status_code == 204 and fingerprint() != clean          # an earlier task starred a repo
-    assert reset_site(expected=clean) == clean                       # the next trial sees the fixture again
+    assert r.status_code == 204 and fingerprint() != clean  # an earlier task starred a repo
+    assert reset_site(expected=clean) == clean  # the next trial sees the fixture again

@@ -4,9 +4,9 @@ The v1 logs in `docs/evidence/v1*/` are unchanged. Everything here is **derived*
 saved run directories (`results/v1*/`, git-ignored, available locally). Regenerate:
 
 ```bash
-uv run python -m pathmemory.accounting docs/evidence/v1/eval.jsonl          > docs/evidence/v1-derived/v1-eval.accounting.jsonl
-uv run python -m pathmemory.accounting docs/evidence/v1/recovery.jsonl      > docs/evidence/v1-derived/v1-recovery.accounting.jsonl
-uv run python -m pathmemory.accounting docs/evidence/v1-repaired/recovery.jsonl > docs/evidence/v1-derived/v1-repaired-recovery.accounting.jsonl
+uv run python -m pathmemory.evaluation.accounting docs/evidence/v1/eval.jsonl          > docs/evidence/v1-derived/v1-eval.accounting.jsonl
+uv run python -m pathmemory.evaluation.accounting docs/evidence/v1/recovery.jsonl      > docs/evidence/v1-derived/v1-recovery.accounting.jsonl
+uv run python -m pathmemory.evaluation.accounting docs/evidence/v1-repaired/recovery.jsonl > docs/evidence/v1-derived/v1-repaired-recovery.accounting.jsonl
 uv run python -m pathmemory.report docs/evidence/v1/eval.jsonl --select both > docs/evidence/v1-derived/v1-eval.report.txt
 ```
 

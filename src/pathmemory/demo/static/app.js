@@ -1,141 +1,3 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PathMemory</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
-<style>
-  :root {
-    --bg: #0f1216; --panel: #161b22; --panel2: #1c232c; --line: #2a333f; --text: #e6edf3; --muted: #8b98a8;
-    --accent: #4f8cff; --graph: #2fbf71; --llm: #c792ea; --fail: #ff5c5c; --warn: #f2b84b;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
-  header { display: flex; align-items: baseline; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
-  header h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
-  header .tag { color: var(--muted); }
-  header .chips { margin-left: auto; display: flex; gap: 8px; }
-  .chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
-  .chip b { color: var(--text); }
-  main { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); height: calc(100vh - 56px); }
-  #graphwrap { position: relative; border-right: 1px solid var(--line); }
-  #cy { position: absolute; inset: 0; }
-  .legend { position: absolute; left: 12px; bottom: 12px; background: rgba(22,27,34,.92); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
-  .legend i { display: inline-block; width: 22px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
-  .side { display: flex; flex-direction: column; min-height: 0; }
-  .tabs { display: flex; gap: 2px; padding: 10px 14px 0; border-bottom: 1px solid var(--line); }
-  .tabs button { background: none; border: 0; color: var(--muted); padding: 8px 12px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
-  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
-  .pane { display: none; overflow: auto; padding: 14px 16px 30px; flex: 1; min-height: 0; }
-  .pane.on { display: block; }
-  select, input { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
-  .goal { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 6px 0 10px; }
-  .goal .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .ok { color: var(--graph); } .bad { color: var(--fail); }
-  .events { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-  .ev { font-size: 12px; border-radius: 6px; padding: 3px 8px; background: var(--panel2); border: 1px solid var(--line); }
-  .ev.fail { border-color: var(--fail); color: #ffb3b3; } .ev.rec { border-color: var(--graph); color: #a9f0c6; }
-  .steps { display: grid; gap: 6px; }
-  .step { display: grid; grid-template-columns: 34px 92px 1fr; gap: 8px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
-  .step.sel { border-color: var(--accent); }
-  .step .n { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .badge { font-size: 11px; font-weight: 600; border-radius: 4px; padding: 2px 6px; text-align: center; }
-  .badge.graph { background: rgba(47,191,113,.15); color: var(--graph); }
-  .badge.llm { background: rgba(199,146,234,.15); color: var(--llm); }
-  .step .page { color: var(--muted); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .step .act { margin-top: 2px; }
-  .step .think { color: var(--muted); font-size: 12px; margin-top: 3px; }
-  .step .err { color: var(--fail); font-size: 12px; margin-top: 3px; }
-  .shot { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #000; }
-  .shot img { display: block; width: 100%; }
-  table { border-collapse: collapse; width: 100%; margin: 6px 0 18px; font-variant-numeric: tabular-nums; }
-  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--line); }
-  th:first-child, td:first-child { text-align: left; }
-  th { color: var(--muted); font-weight: 500; font-size: 12px; }
-  td.cell { cursor: pointer; }
-  td.cell:hover { background: var(--panel2); }
-  h3 { margin: 18px 0 4px; font-size: 15px; }
-  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font-size: 12px; }
-  .routes .r { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
-  .muted { color: var(--muted); }
-  button.go { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 7px 14px; font: inherit; font-weight: 600; cursor: pointer; }
-  button.go:disabled { opacity: .5; cursor: default; }
-  .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--graph); margin-right: 6px; animation: pulse 1s infinite; }
-  @keyframes pulse { 50% { opacity: .2; } }
-  .mem { background: var(--panel); border: 1px solid var(--warn); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
-  .mem h4 { margin: 0 0 6px; font-size: 14px; color: var(--warn); }
-  .mem ul { margin: 4px 0 8px 18px; padding: 0; font-size: 13px; }
-  .mem .k { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
-  button.plain { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
-  .avoid { display: grid; gap: 3px; max-height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 10px; font-size: 12px; }
-  .src { display: inline-block; font-size: 11px; border-radius: 4px; padding: 1px 6px; margin: 1px 2px; background: rgba(79,140,255,.15); color: #a8c4ff; }
-  .src.ess { background: rgba(242,184,75,.18); color: #f7d58f; }
-  .live { font-size: 11px; font-weight: 700; color: #fff; background: var(--fail); border-radius: 4px; padding: 2px 6px; margin-right: 6px; }
-  .rec { font-size: 11px; font-weight: 700; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; margin-right: 6px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
-  .card h4 { margin: 0 0 6px; font-size: 14px; }
-  #edgeinfo { position: absolute; right: 12px; top: 12px; max-width: 360px; background: rgba(22,27,34,.96); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; display: none; }
-  .ev.ver { border-color: #2f6f4f; color: #a9f0c6; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; height: auto; } #graphwrap { height: 60vh; border-right: 0; border-bottom: 1px solid var(--line); } }
-</style>
-</head>
-<body>
-<header>
-  <h1>PathMemory</h1>
-  <span class="tag">FalkorDB procedural memory for a browser agent</span>
-  <label class="muted" style="margin-left:auto">memory
-    <select id="mem"><option value="v2">v2 — training-only (fingerprinted)</option><option value="v2-ablated">v2 ablated — bridge step removed</option><option value="v1">v1 — historical demo memory</option></select></label>
-  <div class="chips" id="chips" style="margin-left:0"></div>
-</header>
-<main>
-  <div id="graphwrap">
-    <div id="cy"></div>
-    <div id="edgeinfo"></div>
-    <div class="legend">
-      <div><i style="background:#56606e"></i>learned step (thicker = more successes)</div>
-      <div><i style="background:var(--graph)"></i>route used in this run</div>
-      <div><i style="background:var(--fail)"></i>step that failed in this run</div>
-      <div><i style="background:var(--accent)"></i>current page</div>
-      <div><i style="background:var(--warn)"></i>written by the last live run</div>
-    </div>
-  </div>
-  <div class="side">
-    <div class="tabs">
-      <button data-tab="v2" class="on">v2 composition</button>
-      <button data-tab="run">Recorded runs</button>
-      <button data-tab="results">Results</button>
-      <button data-tab="query">Route query</button>
-      <button data-tab="live">Live run</button>
-    </div>
-    <div class="pane on" id="v2"><div id="v2view" class="muted">Loading…</div></div>
-    <div class="pane" id="run">
-      <div class="row">
-        <select id="exp"></select><select id="task"></select><select id="mode"></select>
-      </div>
-      <div id="runview" class="muted">Pick a run.</div>
-    </div>
-    <div class="pane" id="results"></div>
-    <div class="pane" id="query">
-      <div class="row"><span class="muted">from</span><select id="qsrc"></select><span class="muted">to</span><select id="qdst"></select></div>
-      <div class="muted" style="font-size:12px;margin-bottom:4px">Pretend these steps are broken (FalkorDB must route around them):</div>
-      <div class="avoid" id="avoid"></div>
-      <div class="routes" id="qroutes"></div>
-      <details><summary class="muted">Cypher</summary><pre id="qcypher"></pre></details>
-    </div>
-    <div class="pane" id="live">
-      <div class="row"><select id="ltask"></select><select id="lmode"><option value="graph">graph memory</option><option value="flat">flat memory</option><option value="none">no memory</option></select>
-        <select id="lmem"><option value="v2">replay from v2 (read-only copy)</option><option value="v2-ablated">replay from v2 ablated (read-only copy)</option><option value="v1">v1 demo memory (can learn)</option></select></div>
-      <div class="row"><label><input type="checkbox" id="lbreak" checked> break the UI (hide the dashboard's repo links)</label></div>
-      <div class="row"><label><input type="checkbox" id="llearn"> learn (v1 memory only): if the run succeeds, write its verified steps to FalkorDB</label></div>
-      <div class="row"><button id="lgo" class="go">Run in a visible browser</button><button id="lreset" class="plain">Reset memory to v1</button><span id="lstatus" class="muted"></span></div>
-      <div class="muted" style="font-size:12px;margin-bottom:10px"><span class="live">LIVE</span>A Chromium window opens on this machine and does the task now, slowed down so each click is visible; the model is called for real. With v2 memory the Gitea fixture is reset first (about 10 s) and the snapshot is checked unchanged afterwards.</div>
-      <div id="lview"></div>
-    </div>
-  </div>
-</main>
-<script>
 const $ = s => document.querySelector(s);
 const api = p => fetch(p).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.detail)));
 let G, cy, EXPS = [], runSeq = 0;
@@ -213,11 +75,16 @@ function markRun(run, upto) {
 
 async function loadExperiments() {
   EXPS = await api('/api/experiments');
+  if (!EXPS.length) {
+    $('#runview').textContent = 'No experiment summaries found. Run scripts/reproduce_v2.sh from the checkout.';
+    $('#results').textContent = 'No experiment summaries found.';
+    return;
+  }
   $('#exp').innerHTML = EXPS.map((e, i) => `<option value="${i}">${e.title}</option>`).join('');
   $('#exp').onchange = fillTasks; $('#task').onchange = fillModes; $('#mode').onchange = openRun;
-  // default to the most telling run: recovery after repair, members-4, graph
-  $('#exp').value = String(Math.max(0, EXPS.length - 1)); fillTasks();
-  if ([...$('#task').options].some(o => o.value === 'members-4')) { $('#task').value = 'members-4'; fillModes(); }
+  // Start with the current composition case.
+  const broken = EXPS.findIndex(e => e.file.includes('v2-broken/') || e.file.endsWith('/broken.jsonl'));
+  $('#exp').value = String(Math.max(0, broken)); fillTasks();
   if ([...$('#mode').options].some(o => o.value === 'graph')) { $('#mode').value = 'graph'; }
   openRun();
   renderResults();
@@ -230,18 +97,22 @@ function fillTasks() {
 }
 function fillModes() {
   const t = EXPS[$('#exp').value].tasks[$('#task').value];
-  $('#mode').innerHTML = Object.entries(t).map(([m, r]) => `<option value="${m}">${m} ${r.success ? '✓' : '✗'}</option>`).join('');
+  $('#mode').innerHTML = Object.entries(t).map(([m, r]) => `<option value="${m}">${m} ${r.success ? '✓' : '✗'}${r.available ? '' : ' (summary only)'}</option>`).join('');
   openRun();
 }
 
 async function openRun(dir) {
+  const seq = ++runSeq;
   if (typeof dir !== 'string') {
     const t = EXPS[$('#exp').value]?.tasks[$('#task').value];
     const r = t && t[$('#mode').value];
     if (!r) return;
+    if (!r.available) {
+      $('#runview').textContent = 'This checkout has the result summary. Screenshots and step traces are available after a local run.';
+      return;
+    }
     dir = r.exp_dir;
   }
-  const seq = ++runSeq;
   const run = await api('/api/run?dir=' + encodeURIComponent(dir));
   if (seq !== runSeq) return;  // a newer selection was made while this one loaded
   // show the run on the memory it actually used
@@ -288,16 +159,25 @@ async function openRun(dir) {
 function esc(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]); }
 
 function renderResults() {
-  $('#results').innerHTML = EXPS.map((e, ei) => {
+  const sections = EXPS.map((e, ei) => {
     const s = e.summary;
-    const head = `<tr><th>mode</th><th>success</th><th>avg steps</th><th>LLM-chosen steps</th><th>replayed</th><th>input tokens</th><th>seconds</th></tr>`;
-    const rows = Object.entries(s).map(([m, v]) => `<tr><td>${m}</td><td>${v.success}/${v.tasks}</td><td>${v.steps}</td><td>${v.llm_steps}</td><td>${v.replayed}</td><td>${v.input_tokens.toLocaleString()}</td><td>${v.seconds}</td></tr>`).join('');
+    const current = e.selection === 'all';
+    const head = current
+      ? '<tr><th>mode</th><th>checker passed</th><th>replay reached page</th><th>model calls</th><th>input tokens</th><th>browser actions</th><th>est. USD</th></tr>'
+      : '<tr><th>mode</th><th>checker passed</th><th>avg steps</th><th>LLM-chosen steps</th><th>replayed</th><th>input tokens</th><th>seconds</th></tr>';
+    const rows = Object.entries(s).map(([m, v]) => current
+      ? `<tr><td>${m}</td><td>${v.success}/${v.tasks}</td><td>${v.replay_reached_goal}/${v.tasks}</td><td>${v.model_calls}</td><td>${v.input_tokens.toLocaleString()}</td><td>${v.steps}</td><td>${v.est_cost_usd.toFixed(4)}</td></tr>`
+      : `<tr><td>${m}</td><td>${v.success}/${v.tasks}</td><td>${v.steps}</td><td>${v.llm_steps}</td><td>${v.replayed}</td><td>${v.input_tokens.toLocaleString()}</td><td>${v.seconds}</td></tr>`).join('');
     const modes = Object.keys(s);
     const per = Object.entries(e.tasks).map(([t, r]) => `<tr><td>${t}</td>${modes.map(m => r[m] ? `<td class="cell" data-e="${ei}" data-t="${t}" data-m="${m}"><span class="${r[m].success ? 'ok' : 'bad'}">${r[m].success ? '✓' : '✗'}</span> ${r[m].steps} st · ${(r[m].input_tokens / 1000).toFixed(1)}k</td>` : '<td>–</td>').join('')}</tr>`).join('');
-    const rep = e.repeated.length ? `<p class="muted">${e.observations} runs; ${e.repeated.length} task/mode pairs were run more than once (${e.repeated.map(d => d.task + '/' + d.mode).join(', ')}). Showing the ${e.selection} attempt; <code>python -m pathmemory.report --select both</code> shows all.</p>` : '';
+    const rep = current ? `<p class="muted">All ${e.observations} trials included. Values are means; checker and replay counts include every trial. Source: ${esc(e.file)}.</p>` : e.repeated.length ? `<p class="muted">${e.observations} runs; ${e.repeated.length} task/mode pairs were run more than once (${e.repeated.map(d => d.task + '/' + d.mode).join(', ')}). Showing the ${e.selection} attempt; <code>python -m pathmemory.report --select both</code> shows all.</p>` : '';
     return `<h3>${e.title}</h3>${rep}<table>${head}${rows}</table>
       <table><tr><th>task</th>${modes.map(m => `<th>${m}</th>`).join('')}</tr>${per}</table>`;
-  }).join('') + `<p class="muted">Same agent, model, prompts and 15-step budget in every mode; only the memory differs. Click a cell to replay that run.</p>`;
+  });
+  const current = sections.filter((_, i) => EXPS[i].selection === 'all').join('');
+  const historical = sections.filter((_, i) => EXPS[i].selection !== 'all').join('');
+  $('#results').innerHTML = current + `<details><summary class="muted">Historical v1 experiments (see correction notes)</summary>${historical}</details>`
+    + '<p class="muted">Same agent, model, prompts and 15-step budget in every mode; only the memory differs. Click a cell to inspect a trial. Screenshots require local run files.</p>';
   document.querySelectorAll('td.cell').forEach(td => td.onclick = () => {
     $('#exp').value = td.dataset.e; fillTasks(); $('#task').value = td.dataset.t; fillModes(); $('#mode').value = td.dataset.m; openRun(); showTab('run');
   });
@@ -437,52 +317,128 @@ async function resetMemory() {
 
 async function renderV2() {
   const d = await api('/api/v2/demo');
-  const route = r => `${r.keys.length - 1} hops: ${r.edges.map(e => `<b>${esc(e.name)}</b>`).join(' → ')}<div class="muted" style="font-size:12px">${r.keys.join(' → ')}</div>`;
-  const hopRows = d.composed.eids.map((eid, i) => `<tr><td>${d.composed.keys[i]} → ${d.composed.keys[i + 1]}</td>
-      <td style="text-align:left">${esc(d.broken.routes[0].edges[i].name)}</td><td style="text-align:left">${srcBadges(d.composed.sources_per_hop[i], true)}</td></tr>`).join('');
-  const cont = Object.entries(d.containment).map(([ep, c]) => `<tr><td>${esc(EP(ep))}</td><td>${c.steps_of_route_present.length} / ${d.composed.eids.length}</td><td>${c.contiguous || c.all_steps_somewhere ? '<span class="bad">yes</span>' : 'no'}</td></tr>`).join('');
-  const rec = d.recorded.map(r => `<tr><td>${r.condition}</td><td style="text-align:left">${r.mode}</td><td>${r.success ? '✓' : '✗'}</td><td>${esc(r.started)}</td>
-      <td>${r.available ? `<a href="#" data-dir="${esc(r.dir)}" class="recl" style="color:var(--accent)">open</a>` : '<span class="muted">run files not on this machine</span>'}</td></tr>`).join('');
+  const normal = d.normal.routes[0], alternative = d.broken.routes[0];
+  const recording = d.recorded.find(r => r.condition === 'broken' && r.mode === 'graph' && r.available);
+  const route = r => `<div class="route-line">${r.edges.map(e => `<span>${esc(e.name)}</span>`).join('<i>→</i>')}</div>`;
+  const hopRows = alternative.edges.map((edge, i) => `<tr><td>${i + 1}</td>
+    <td>${esc(edge.name)}<small>${esc(alternative.keys[i])} → ${esc(alternative.keys[i + 1])}</small></td>
+    <td>${srcBadges(edge.sources, true)}</td></tr>`).join('');
+  const cont = Object.entries(d.containment).map(([ep, c]) => `<tr><td>${esc(EP(ep))}</td><td>${c.steps_of_route_present.length} / ${d.composed.eids.length}</td><td>${c.contiguous || c.all_steps_somewhere ? 'yes' : 'no'}</td></tr>`).join('');
+  const rec = d.recorded.map(r => `<tr><td>${esc(r.condition)}</td><td>${esc(r.mode)}</td><td>${r.success ? 'passed' : 'failed'}</td>
+    <td>${r.available ? `<a href="#" data-dir="${esc(r.dir)}" class="recl">Open run</a>` : '<span class="muted">summary only</span>'}</td></tr>`).join('');
   $('#v2view').innerHTML = `
-    <div class="card"><h4>Can memory reach a page by a route no past run took?</h4>
-      Task <b>issues-2</b> (held out): <i>Create an issue "Update color tokens" in primer/design and assign it to carol.</i>
-      Condition: the dashboard's repository links are hidden. Memory: <b>pathmemory_v2</b> · fingerprint ${d.graph_fingerprint}
-      ${d.matches_manifest ? '<span class="ok">= manifest ✓</span>' : '<span class="bad">≠ manifest</span>'}.</div>
-    <h3>1 · Training episodes (successful runs of training tasks only)</h3>
-    <table><tr><th>task</th><th style="text-align:left">goal</th><th>steps</th><th>edges taught</th></tr>
-      ${d.episodes.map(e => `<tr><td>${e.task}${e.success ? '' : ' <span class="bad">(failed: not used)</span>'}</td><td style="text-align:left">${esc(e.goal)}</td><td>${e.steps}</td><td>${e.edges_taught}</td></tr>`).join('')}</table>
-    <h3>2 · The graph's decision <span class="live">LIVE QUERY</span><span class="muted" style="font-size:12px">FalkorDB, computed ${d.computed_at}</span></h3>
-    <div class="card"><h4>Usual route (from one episode, issues-1)</h4>${route(d.normal.routes[0])}
-      <div><button class="plain" id="v2n">show on graph</button></div></div>
-    <div class="card"><h4>Dashboard link unavailable → step banned → FalkorDB's alternative</h4>
-      banned: <code>${d.broken.banned.join(', ')}</code> (<i>link '{owner}/{repo}'</i>)<br>${route(d.broken.routes[0])}
-      <table><tr><th>hop</th><th style="text-align:left">click</th><th style="text-align:left">learned from (gold = only source)</th></tr>${hopRows}</table>
-      <div><button class="plain" id="v2b">show on graph</button></div></div>
-    <div class="card"><h4>No single past run contains this route ${d.no_single_episode_contains_route ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'}</h4>
-      <table><tr><th>training episode</th><th>route steps it contains</th><th>contains whole route</th></tr>${cont}</table>
-      Flat replay (one stored run at a time) finds ${d.flat_replay.broken_ui.length} route(s) here.</div>
-    <div class="card"><h4>Ablation: bridge step <code>${d.ablation ? d.ablation.removed : '?'}</code> removed (copy of the graph)</h4>
-      Same query with the dashboard step banned: ${d.ablation && !d.ablation.broken_ui_routes.length ? '<b class="bad">no route</b>' : 'route found'} ·
-      ablated fingerprint ${d.ablation ? d.ablation.fingerprint : '?'} <div><button class="plain" id="v2a">show ablated graph</button></div></div>
-    <details><summary class="muted">Cypher</summary><pre>${esc(d.cypher)}</pre></details>
-    <h3>3 · Run it now <span class="live">LIVE</span></h3>
-    <div class="row"><button class="go" id="v2run">Run composed route (v2, links hidden)</button>
-      <button class="plain" id="v2abl">Run with ablated graph</button></div>
-    <div class="muted" style="font-size:12px">Opens a real Chromium window and calls the model (about 40 s, ~$0.002). Replay works on a read-only copy of the memory.</div>
-    <h3>4 · Recorded runs <span class="rec">RECORDED</span><span class="muted" style="font-size:12px">trial 1 of 5 from the evaluation on 2026-10-18 (all trials: FAIR_COMPARISON.md)</span></h3>
-    <table><tr><th>condition</th><th style="text-align:left">mode</th><th>checker</th><th>started</th><th></th></tr>${rec}</table>`;
-  const show = async (mem, keys, failed) => {
+    <div class="walk-intro"><span class="eyebrow">A browser agent with memory · FalkorDB</span>
+      <h2>Find another route when a link disappears.</h2>
+      <p>Create an issue in <b>primer/design</b> and assign it to <b>carol</b>.
+      The usual repository link disappears. Can the agent reach the issue form using steps it learned before?</p>
+      <span class="chip">Local Gitea demo · synthetic data · no API key for this walkthrough</span></div>
+    <nav class="walk-nav" aria-label="Walkthrough steps">
+      <button type="button" data-walk="0"><b>1</b> Learn</button>
+      <button type="button" data-walk="1"><b>2</b> Lose a link</button>
+      <button type="button" data-walk="2"><b>3</b> Watch replay</button>
+    </nav>
+    <section class="walk-panel" data-panel="0">
+      <h3>Remember steps, then reuse them</h3>
+      <p>One training run learned how to find a repository through <b>Explore</b>.
+      Another learned how to reach its <b>New Issue</b> form. FalkorDB stores each navigation step
+      with the runs that taught it.</p>
+      <div class="training-pair">
+        <div class="card"><span class="src">explore-3</span><h4>Find a repository</h4><p>Explore → repository</p></div>
+        <div class="card"><span class="src">issues-1</span><h4>Reach the issue form</h4><p>Repository → Issues → New Issue</p></div>
+      </div>
+      <div class="card"><h4>When the usual dashboard link is available</h4>${route(normal)}
+        <p class="muted">This route can be replayed from one past run.</p>
+        <button class="plain" id="v2n">Highlight the usual route</button></div>
+      <button class="go" data-next="1">Hide the usual link →</button>
+    </section>
+    <section class="walk-panel" data-panel="1" hidden>
+      <h3>The link is gone. The steps still connect.</h3>
+      <p>This query excludes the dashboard's repository link, as if it were unavailable.
+      FalkorDB joins steps from different training runs into an alternative:</p>
+      <div class="card"><h4>The composed route <span class="live">LIVE QUERY</span></h4>${route(alternative)}
+        <p class="muted">Computed by FalkorDB at ${esc(d.computed_at)}. This is a route query; browser execution is shown in step 3.</p>
+        <button class="plain" id="v2b">Highlight the alternative</button></div>
+      <h4>Why this route?</h4>
+      <p>Every hop has a source. Gold labels mark steps supplied by just one training run.</p>
+      <table class="provenance"><tr><th>Hop</th><th>Remembered click</th><th>Learned from</th></tr>${hopRows}</table>
+      <p class="${d.no_single_episode_contains_route ? 'ok' : 'bad'}">${d.no_single_episode_contains_route ? 'No single training run contains this whole route.' : 'A training run contains this route.'}</p>
+      <button class="go" data-next="2">See the browser replay →</button>
+    </section>
+    <section class="walk-panel" data-panel="2" hidden>
+      <h3>Follow the route in a real browser</h3>
+      <p>Replay checks the landing page and chosen repository after each navigation.
+      The model then fills and submits the issue form.</p>
+      <div class="card"><h4><span class="rec">RECORDED</span>Browser execution</h4>
+        <video controls preload="none" poster="/static/demo-poster.jpg" aria-label="Three-minute PathMemory demo with narration and captions">
+          <source src="/demo-video" type="video/mp4">
+          <a href="/demo-video">Download the three-minute demo</a>
+        </video>
+        <p class="muted">Three-minute narrated demo. The browser observations are recorded; captions are included in the picture.</p>
+        <p><a href="/demo-video" download="pathmemory-demo.mp4">Download the MP4</a></p>
+        ${recording ? '<p>Open the saved run and select each step to inspect its browser screenshot. REPLAY marks navigation from memory; LLM marks model actions.</p>' : ''}
+        ${recording ? '<button class="go" id="v2watch">Inspect the saved browser steps</button>' : '<p class="muted">Individual browser steps are not saved in this checkout. The video above shows the recorded execution.</p>'}</div>
+      <div class="card"><h4>Test the explanation: remove the bridge</h4>
+        <p>In a prepared copy, remove <b>Explore → repository</b>. With the dashboard link excluded too,
+        the same query ${d.ablation && !d.ablation.broken_ui_routes.length ? '<b class="bad">finds no memory route</b>' : 'finds a route'}.
+        The base browser agent can still navigate using the model.</p>
+        <button class="plain" id="v2a">Show the graph without the bridge</button>
+        <span id="bridge-status" class="muted" role="status"></span></div>
+      <p class="muted">Across five recorded trials per mode, graph replay reached the target page 5/5;
+      single-trajectory replay and the graph without the bridge reached it through replay 0/5.
+      Every mode completed the task. One task and one site; no demonstrated task-success or latency advantage.</p>
+      <button class="plain" id="v2results">Inspect all results</button>
+    </section>
+    <details class="walk-details"><summary>Inspect the training data and query</summary>
+      <p>Memory fingerprint: <code>${esc(d.graph_fingerprint)}</code>
+      <span class="${d.matches_manifest ? 'ok' : 'bad'}">${d.matches_manifest ? 'matches the training manifest' : 'does not match the training manifest'}</span>.</p>
+      <table><tr><th>Task</th><th>Goal</th><th>Steps</th></tr>
+        ${d.episodes.map(e => `<tr><td>${esc(e.task)}</td><td>${esc(e.goal)}</td><td>${e.steps}</td></tr>`).join('')}</table>
+      <h4>Does any single run contain the composed route?</h4>
+      <table><tr><th>Training run</th><th>Route steps present</th><th>Whole route</th></tr>${cont}</table>
+      <p>Single-trajectory replay finds ${d.flat_replay.broken_ui.length} route(s) with the dashboard link excluded.</p>
+      <pre>${esc(d.cypher)}</pre></details>
+    <details class="walk-details"><summary>Run a fresh browser task · API key required</summary>
+      <p>Opens Chromium on this machine and calls the model. The Gitea fixture resets first;
+      navigation uses a copy of the selected memory. Requires the local setup and API key described in the README.</p>
+      <div class="row"><button class="go" id="v2run">Run with graph memory</button>
+        <button class="plain" id="v2abl">Run without the bridge</button></div></details>
+    <details class="walk-details"><summary>Browse recorded runs</summary>
+      <p class="muted">Trial 1 of 5 from the evaluation on 2026-10-18. All trials appear in Results.</p>
+      <table class="provenance"><tr><th>Condition</th><th>Mode</th><th>Checker</th><th></th></tr>${rec}</table></details>`;
+  const show = async (mem, keys, failed = []) => {
     if (MEM() !== mem) { $('#mem').value = mem; await loadGraph(); }
     clearMarks(); markRoute(keys, 'used');
-    (failed || []).forEach(eid => cy.getElementById(eid).removeClass('used').addClass('failed'));
+    failed.forEach(eid => cy.getElementById(eid).removeClass('used').addClass('failed'));
   };
-  $('#v2n').onclick = () => show('v2', d.normal.routes[0].keys);
-  $('#v2b').onclick = () => show('v2', d.broken.routes[0].keys, d.broken.banned);
-  $('#v2a').onclick = () => show('v2-ablated', [], d.broken.banned);
+  let walkSequence = 0;
+  const selectStep = async index => {
+    const sequence = ++walkSequence;
+    document.querySelectorAll('[data-walk]').forEach(b => {
+      const selected = Number(b.dataset.walk) === index;
+      b.classList.toggle('on', selected);
+      if (selected) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    });
+    document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = Number(p.dataset.panel) !== index; });
+    $('#bridge-status').textContent = '';
+    // Return to the training graph after inspecting the bridge-removal copy.
+    if (MEM() !== 'v2') { $('#mem').value = 'v2'; await loadGraph(); }
+    if (sequence !== walkSequence) return;
+    await show('v2', index === 0 ? normal.keys : alternative.keys, index === 0 ? [] : d.broken.banned);
+  };
+  document.querySelectorAll('[data-walk]').forEach(b => { b.onclick = () => selectStep(Number(b.dataset.walk)); });
+  document.querySelectorAll('[data-next]').forEach(b => { b.onclick = () => selectStep(Number(b.dataset.next)); });
+  $('#v2n').onclick = () => show('v2', normal.keys);
+  $('#v2b').onclick = () => show('v2', alternative.keys, d.broken.banned);
+  $('#v2a').onclick = async () => {
+    await show('v2-ablated', [], d.broken.banned);
+    $('#bridge-status').textContent = d.ablation && !d.ablation.broken_ui_routes.length ? 'No memory route remains.' : 'A memory route remains.';
+  };
+  if (recording) $('#v2watch').onclick = () => { showTab('run'); openRun(recording.dir); };
+  $('#v2results').onclick = () => showTab('results');
   $('#v2run').onclick = () => startDemo('v2');
   $('#v2abl').onclick = () => startDemo('v2-ablated');
-  document.querySelectorAll('.recl').forEach(a => a.onclick = ev => { ev.preventDefault(); showTab('run'); openRun(a.dataset.dir); });
-  show('v2', d.broken.routes[0].keys, d.broken.banned);
+  document.querySelectorAll('.recl').forEach(a => { a.onclick = ev => { ev.preventDefault(); showTab('run'); openRun(a.dataset.dir); }; });
+  await selectStep(0);
 }
 
 function showTab(t) {
@@ -494,7 +450,10 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab
 $('#qsrc').onchange = runQuery; $('#qdst').onchange = runQuery; $('#avoid').onchange = runQuery;
 
 $('#mem').onchange = () => loadGraph();
-loadGraph().then(loadExperiments).then(initLive).then(renderV2);
-</script>
-</body>
-</html>
+loadGraph().then(loadExperiments).then(initLive).then(renderV2).catch(error => {
+  console.error('Could not load PathMemory:', error);
+  $('#v2view').innerHTML = `<div class="card"><h2>Could not load the local demo</h2>
+    <p>From the source checkout, run <code>scripts/reproduce_v2.sh</code>, then reload this page.
+    If setup has already completed, check that FalkorDB is running and inspect the server terminal for details.</p>
+    <p><a href="/demo-video">Watch the three-minute demo video</a></p></div>`;
+});

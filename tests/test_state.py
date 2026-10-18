@@ -53,6 +53,7 @@ def test_only_nav_clicks_are_replayable():
 
 def test_badge_counts_and_issue_numbers():
     from pathmemory.state import norm_name
+
     assert norm_name("Issues 4") == "Issues" and norm_name("Pull Requests") == "Pull Requests"
     b = {"owner": "a11yproject", "repo": "a11yproject.com", "n": "4"}
     assert templatize("a11yproject/a11yproject.com#4", b) == "{owner}/{repo}#{n}"

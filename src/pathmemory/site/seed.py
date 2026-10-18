@@ -80,10 +80,30 @@ def wait_healthy(timeout=90):
 
 def create_admin():
     subprocess.run(
-        ["docker", "compose", "exec", "-T", "-u", "git", "gitea", "gitea", "admin", "user", "create",
-         "--admin", "--username", ADMIN[0], "--password", ADMIN[1], "--email", f"{ADMIN[0]}@example.com",
-         "--must-change-password=false"],
-        cwd=settings.root, check=False, capture_output=True,
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "-u",
+            "git",
+            "gitea",
+            "gitea",
+            "admin",
+            "user",
+            "create",
+            "--admin",
+            "--username",
+            ADMIN[0],
+            "--password",
+            ADMIN[1],
+            "--email",
+            f"{ADMIN[0]}@example.com",
+            "--must-change-password=false",
+        ],
+        cwd=settings.root,
+        check=False,
+        capture_output=True,
     )
 
 
@@ -91,8 +111,11 @@ def seed():
     wait_healthy()
     create_admin()
     for u in USERS:
-        api("POST", "/admin/users", json={"username": u, "email": f"{u}@example.com", "password": "password123",
-                                          "must_change_password": False})
+        api(
+            "POST",
+            "/admin/users",
+            json={"username": u, "email": f"{u}@example.com", "password": "password123", "must_change_password": False},
+        )
     for org, desc in ORGS.items():
         api("POST", "/orgs", json={"username": org, "description": desc})
         team = api("GET", f"/orgs/{org}/teams")[0]  # Owners
@@ -100,12 +123,25 @@ def seed():
             api("PUT", f"/teams/{team['id']}/members/{m}")
     for owner, name, private, desc in REPOS:
         path = "/user/repos" if owner == ADMIN[0] else f"/orgs/{owner}/repos"
-        api("POST", path, json={"name": name, "private": private, "description": desc,
-                                "auto_init": True, "readme": "Default", "default_branch": "main"})
+        api(
+            "POST",
+            path,
+            json={
+                "name": name,
+                "private": private,
+                "description": desc,
+                "auto_init": True,
+                "readme": "Default",
+                "default_branch": "main",
+            },
+        )
         full = f"{owner}/{name}"
         for fname, content in FILES.get(full, {}).items():
-            api("POST", f"/repos/{full}/contents/{fname}",
-                json={"content": base64.b64encode(content.encode()).decode(), "message": f"Add {fname}"})
+            api(
+                "POST",
+                f"/repos/{full}/contents/{fname}",
+                json={"content": base64.b64encode(content.encode()).decode(), "message": f"Add {fname}"},
+            )
         for lname, color in LABELS.items():
             api("POST", f"/repos/{full}/labels", json={"name": lname, "color": color})
         for ms in MILESTONES.get(full, []):
@@ -113,9 +149,9 @@ def seed():
         for user, perm in COLLABORATORS.get(full, {}).items():
             api("PUT", f"/repos/{full}/collaborators/{user}", json={"permission": perm})
     for full, issues in ISSUES.items():
-        label_ids = {l["name"]: l["id"] for l in api("GET", f"/repos/{full}/labels")}
+        label_ids = {label["name"]: label["id"] for label in api("GET", f"/repos/{full}/labels")}
         for title, labels, closed, assignee in issues:
-            body = {"title": title, "labels": [label_ids[l] for l in labels]}
+            body = {"title": title, "labels": [label_ids[label] for label in labels]}
             if assignee:
                 body["assignees"] = [assignee]
             issue = api("POST", f"/repos/{full}/issues", json=body)
@@ -126,8 +162,12 @@ def seed():
 
 
 def reset():
-    subprocess.run(["docker", "compose", "up", "-d", "--force-recreate", "gitea"], cwd=settings.root,
-                   check=True, capture_output=True)
+    subprocess.run(
+        ["docker", "compose", "up", "-d", "--force-recreate", "gitea"],
+        cwd=settings.root,
+        check=True,
+        capture_output=True,
+    )
     seed()
 
 
@@ -137,17 +177,28 @@ def state() -> dict:
     for r in sorted(api("GET", "/repos/search?limit=50")["data"], key=lambda r: r["full_name"]):
         full = r["full_name"]
         repos[full] = {
-            "private": r["private"], "fork": r["fork"], "description": r["description"],
+            "private": r["private"],
+            "fork": r["fork"],
+            "description": r["description"],
             "collaborators": sorted(c["login"] for c in api("GET", f"/repos/{full}/collaborators") or []),
-            "issues": sorted([i["title"], i["state"], sorted(a["login"] for a in i.get("assignees") or []),
-                              sorted(l["name"] for l in i.get("labels") or [])]
-                             for i in api("GET", f"/repos/{full}/issues?state=all&type=issues&limit=50") or []),
+            "issues": sorted(
+                [
+                    i["title"],
+                    i["state"],
+                    sorted(a["login"] for a in i.get("assignees") or []),
+                    sorted(label["name"] for label in i.get("labels") or []),
+                ]
+                for i in api("GET", f"/repos/{full}/issues?state=all&type=issues&limit=50") or []
+            ),
             "milestones": sorted(m["title"] for m in api("GET", f"/repos/{full}/milestones?state=all") or []),
         }
     me = api("GET", "/user")
-    return {"repos": repos, "user": {"full_name": me["full_name"], "website": me["website"]},
-            "starred": sorted(r["full_name"] for r in api("GET", "/user/starred") or []),
-            "following": sorted(u["login"] for u in api("GET", "/user/following") or [])}
+    return {
+        "repos": repos,
+        "user": {"full_name": me["full_name"], "website": me["website"]},
+        "starred": sorted(r["full_name"] for r in api("GET", "/user/starred") or []),
+        "following": sorted(u["login"] for u in api("GET", "/user/following") or []),
+    }
 
 
 def fingerprint() -> str:

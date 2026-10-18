@@ -10,7 +10,7 @@ training episode's own navigation steps. For the composition case (dashboard rep
   - what flat replay (single-trajectory routes) finds for the same request
   - the same query on the ablated copy (bridge step removed)
 
-    uv run python -m pathmemory.composition > docs/evidence/v2/composition.json
+    uv run python -m pathmemory.evaluation.composition > docs/evidence/v2/composition.json
 """
 
 import json
@@ -46,16 +46,25 @@ def bridge_step(g: GraphMemory) -> str:
 def contains(nav: list[dict], eids: list[str]) -> dict:
     """Does one episode's own step sequence contain the route: as a contiguous run, or every step at all?"""
     seq = [e["eid"] for e in nav]
-    contiguous = any(seq[i:i + len(eids)] == eids for i in range(len(seq) - len(eids) + 1))
-    return {"contiguous": contiguous, "all_steps_somewhere": set(eids) <= set(seq),
-            "steps_of_route_present": [x for x in eids if x in seq]}
+    contiguous = any(seq[i : i + len(eids)] == eids for i in range(len(seq) - len(eids) + 1))
+    return {
+        "contiguous": contiguous,
+        "all_steps_somewhere": set(eids) <= set(seq),
+        "steps_of_route_present": [x for x in eids if x in seq],
+    }
 
 
 def query(g: GraphMemory, banned: list[str]) -> list[dict]:
     rows = g.q(ROUTE_CYPHER, src=START, dst=GOAL, banned=banned)
-    return [{"keys": k, "hops": h, "fails": f,
-             "edges": [dict(zip(("eid", "role", "name", "scope", "sources"), e)) for e in edges]}
-            for k, edges, h, f in rows]
+    return [
+        {
+            "keys": k,
+            "hops": h,
+            "fails": f,
+            "edges": [dict(zip(("eid", "role", "name", "scope", "sources"), e)) for e in edges],
+        }
+        for k, edges, h, f in rows
+    ]
 
 
 def evidence() -> dict:
@@ -70,26 +79,41 @@ def evidence() -> dict:
     sources_per_hop = [sorted(e["sources"]) for e in composed["edges"]]
     essential = sorted({s[0] for s in sources_per_hop if len(s) == 1})  # hops only one episode taught
     out = {
-        "graph": GRAPH, "graph_fingerprint": g.fingerprint(), "flat_store": str(FLAT.relative_to(settings.root)),
+        "graph": GRAPH,
+        "graph_fingerprint": g.fingerprint(),
+        "flat_store": str(FLAT.relative_to(settings.root)),
         "request": {"from": START, "to": GOAL},
         "cypher": ROUTE_CYPHER,
         "normal_ui": {"banned": [], "routes": normal},
-        "broken_ui": {"banned": [dash], "why": "dashboard repo link hidden: replay finds no such link and bans the step",
-                      "routes": broken},
-        "composed_route": {"keys": composed["keys"], "eids": eids, "sources_per_hop": sources_per_hop,
-                           "distinct_source_episodes": sorted({x for s in sources_per_hop for x in s}),
-                           "essential_episodes": essential},
+        "broken_ui": {
+            "banned": [dash],
+            "why": "dashboard repo link hidden: replay finds no such link and bans the step",
+            "routes": broken,
+        },
+        "composed_route": {
+            "keys": composed["keys"],
+            "eids": eids,
+            "sources_per_hop": sources_per_hop,
+            "distinct_source_episodes": sorted({x for s in sources_per_hop for x in s}),
+            "essential_episodes": essential,
+        },
         "single_episode_containment": episodes,
-        "no_single_episode_contains_route": not any(v["contiguous"] or v["all_steps_somewhere"]
-                                                    for v in episodes.values()),
+        "no_single_episode_contains_route": not any(
+            v["contiguous"] or v["all_steps_somewhere"] for v in episodes.values()
+        ),
         "flat_replay_routes": {"normal_ui": flat.routes(START, GOAL), "broken_ui": flat.routes(START, GOAL, [dash])},
     }
     names = GraphMemory(GRAPH).db.list_graphs()
     if ABLATED in names:
         a = GraphMemory(ABLATED)
-        out["ablation"] = {"graph": ABLATED, "fingerprint": a.fingerprint(), "removed": bridge,
-                           "bridge_present": any(e["eid"] == bridge for e in a.edges()),
-                           "broken_ui_routes": query(a, [dash]), "normal_ui_routes": query(a, [])}
+        out["ablation"] = {
+            "graph": ABLATED,
+            "fingerprint": a.fingerprint(),
+            "removed": bridge,
+            "bridge_present": any(e["eid"] == bridge for e in a.edges()),
+            "broken_ui_routes": query(a, [dash]),
+            "normal_ui_routes": query(a, []),
+        }
     return out
 
 

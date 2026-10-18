@@ -35,6 +35,7 @@ def collaborator(repo, user, perm=None):
         if perm is None:
             return True
         return (_json(f"/repos/{repo}/collaborators/{user}/permission") or {}).get("permission") == perm
+
     return check
 
 
@@ -47,10 +48,11 @@ def issue_exists(repo, title, **want):
                 continue
             if "state" in want and i["state"] != want["state"]:
                 continue
-            if "label" in want and want["label"] not in [l["name"] for l in i.get("labels") or []]:
+            if "label" in want and want["label"] not in [label["name"] for label in i.get("labels") or []]:
                 continue
             return True
         return False
+
     return check
 
 
@@ -58,6 +60,7 @@ def repo_exists(full, **want):
     def check():
         r = _json(f"/repos/{full}")
         return bool(r) and all(r.get(k) == v for k, v in want.items())
+
     return check
 
 
@@ -90,62 +93,174 @@ class TaskSpec:
 
 TASKS = [
     # --- repo members / collaborators: repo -> Settings -> Collaborators
-    TaskSpec("members-1", "members", "mutate", "Add bob as a collaborator to my dotfiles repository.",
-             collaborator("byteblaze/dotfiles", "bob")),
-    TaskSpec("members-2", "members", "mutate", "Give carol access to the gimmiethat.space repository as a collaborator.",
-             collaborator("byteblaze/gimmiethat.space", "carol")),
-    TaskSpec("members-3", "members", "retrieve", "Which users are collaborators on my gimmiethat.space repository? Reply with their usernames.",
-             answer=["alice"]),
-    TaskSpec("members-4", "members", "mutate", "erin wants to look at my metaseq repo. Add her as a collaborator.",
-             collaborator("byteblaze/metaseq", "erin")),
+    TaskSpec(
+        "members-1",
+        "members",
+        "mutate",
+        "Add bob as a collaborator to my dotfiles repository.",
+        collaborator("byteblaze/dotfiles", "bob"),
+    ),
+    TaskSpec(
+        "members-2",
+        "members",
+        "mutate",
+        "Give carol access to the gimmiethat.space repository as a collaborator.",
+        collaborator("byteblaze/gimmiethat.space", "carol"),
+    ),
+    TaskSpec(
+        "members-3",
+        "members",
+        "retrieve",
+        "Which users are collaborators on my gimmiethat.space repository? Reply with their usernames.",
+        answer=["alice"],
+    ),
+    TaskSpec(
+        "members-4",
+        "members",
+        "mutate",
+        "erin wants to look at my metaseq repo. Add her as a collaborator.",
+        collaborator("byteblaze/metaseq", "erin"),
+    ),
     # --- issues: repo -> Issues -> (new | filter | issue page)
-    TaskSpec("issues-1", "issues", "mutate", 'Open an issue titled "Improve focus outlines" in the a11yproject.com repository.',
-             issue_exists("a11yproject/a11yproject.com", "Improve focus outlines")),
-    TaskSpec("issues-2", "issues", "mutate", 'Create an issue "Update color tokens" in primer/design and assign it to carol.',
-             issue_exists("primer/design", "Update color tokens", assignee="carol")),
-    TaskSpec("issues-3", "issues", "mutate", 'Assign the issue "Screen reader announces menu twice" in a11yproject.com to bob.',
-             issue_exists("a11yproject/a11yproject.com", "Screen reader announces menu twice", assignee="bob")),
-    TaskSpec("issues-4", "issues", "mutate", 'Close the issue "Add tmux config" in my dotfiles repo.',
-             issue_exists("byteblaze/dotfiles", "Add tmux config", state="closed")),
-    TaskSpec("issues-5", "issues", "navigate", "Go to the list of closed issues in the a11yproject.com repository.",
-             url_pattern=r"/a11yproject/a11yproject\.com/issues\?.*state=closed"),
-    TaskSpec("issues-6", "issues", "retrieve", "How many open issues does the primer/design repository have? Reply with the number.",
-             answer=["2"]),
-    TaskSpec("issues-7", "issues", "retrieve", "Who is assigned to the issue about contrast on footer links in a11yproject.com?",
-             answer=["bob"]),
+    TaskSpec(
+        "issues-1",
+        "issues",
+        "mutate",
+        'Open an issue titled "Improve focus outlines" in the a11yproject.com repository.',
+        issue_exists("a11yproject/a11yproject.com", "Improve focus outlines"),
+    ),
+    TaskSpec(
+        "issues-2",
+        "issues",
+        "mutate",
+        'Create an issue "Update color tokens" in primer/design and assign it to carol.',
+        issue_exists("primer/design", "Update color tokens", assignee="carol"),
+    ),
+    TaskSpec(
+        "issues-3",
+        "issues",
+        "mutate",
+        'Assign the issue "Screen reader announces menu twice" in a11yproject.com to bob.',
+        issue_exists("a11yproject/a11yproject.com", "Screen reader announces menu twice", assignee="bob"),
+    ),
+    TaskSpec(
+        "issues-4",
+        "issues",
+        "mutate",
+        'Close the issue "Add tmux config" in my dotfiles repo.',
+        issue_exists("byteblaze/dotfiles", "Add tmux config", state="closed"),
+    ),
+    TaskSpec(
+        "issues-5",
+        "issues",
+        "navigate",
+        "Go to the list of closed issues in the a11yproject.com repository.",
+        url_pattern=r"/a11yproject/a11yproject\.com/issues\?.*state=closed",
+    ),
+    TaskSpec(
+        "issues-6",
+        "issues",
+        "retrieve",
+        "How many open issues does the primer/design repository have? Reply with the number.",
+        answer=["2"],
+    ),
+    TaskSpec(
+        "issues-7",
+        "issues",
+        "retrieve",
+        "Who is assigned to the issue about contrast on footer links in a11yproject.com?",
+        answer=["bob"],
+    ),
     # --- profile settings: avatar menu -> Settings -> (Profile | SSH keys | Applications)
-    TaskSpec("profile-1", "profile", "mutate", "Set the website URL on my profile to https://byteblaze.dev",
-             user_field("website", "https://byteblaze.dev")),
-    TaskSpec("profile-2", "profile", "mutate", 'Change my full name to "Byte Blaze".',
-             user_field("full_name", "Byte Blaze")),
-    TaskSpec("profile-3", "profile", "navigate", "Open the page where I can manage my SSH keys.",
-             url_pattern=r"/user/settings/keys"),
-    TaskSpec("profile-4", "profile", "navigate", "Open the page where I can create access tokens for applications.",
-             url_pattern=r"/user/settings/applications"),
+    TaskSpec(
+        "profile-1",
+        "profile",
+        "mutate",
+        "Set the website URL on my profile to https://byteblaze.dev",
+        user_field("website", "https://byteblaze.dev"),
+    ),
+    TaskSpec(
+        "profile-2", "profile", "mutate", 'Change my full name to "Byte Blaze".', user_field("full_name", "Byte Blaze")
+    ),
+    TaskSpec(
+        "profile-3",
+        "profile",
+        "navigate",
+        "Open the page where I can manage my SSH keys.",
+        url_pattern=r"/user/settings/keys",
+    ),
+    TaskSpec(
+        "profile-4",
+        "profile",
+        "navigate",
+        "Open the page where I can create access tokens for applications.",
+        url_pattern=r"/user/settings/applications",
+    ),
     # --- repo creation / structure
-    TaskSpec("repos-1", "repos", "mutate", 'Create a new public repository called "hackathon-notes".',
-             repo_exists("byteblaze/hackathon-notes", private=False)),
-    TaskSpec("repos-2", "repos", "mutate", 'Create a private repository named "secret-plans".',
-             repo_exists("byteblaze/secret-plans", private=True)),
-    TaskSpec("repos-3", "repos", "mutate", "Fork the primer/design repository into my account.",
-             repo_exists("byteblaze/design", fork=True)),
-    TaskSpec("repos-4", "repos", "mutate", 'Create a milestone called "Beta" in the primer/design repository.',
-             milestone_exists("primer/design", "Beta")),
+    TaskSpec(
+        "repos-1",
+        "repos",
+        "mutate",
+        'Create a new public repository called "hackathon-notes".',
+        repo_exists("byteblaze/hackathon-notes", private=False),
+    ),
+    TaskSpec(
+        "repos-2",
+        "repos",
+        "mutate",
+        'Create a private repository named "secret-plans".',
+        repo_exists("byteblaze/secret-plans", private=True),
+    ),
+    TaskSpec(
+        "repos-3",
+        "repos",
+        "mutate",
+        "Fork the primer/design repository into my account.",
+        repo_exists("byteblaze/design", fork=True),
+    ),
+    TaskSpec(
+        "repos-4",
+        "repos",
+        "mutate",
+        'Create a milestone called "Beta" in the primer/design repository.',
+        milestone_exists("primer/design", "Beta"),
+    ),
     # (Gitea's header commit/branch counters are cached and can disagree with the API, so no count questions here.)
-    TaskSpec("repos-5", "repos", "retrieve", "What is the description of the primer/design repository?",
-             answer=["primer design guidelines"]),
+    TaskSpec(
+        "repos-5",
+        "repos",
+        "retrieve",
+        "What is the description of the primer/design repository?",
+        answer=["primer design guidelines"],
+    ),
     # --- explore: a second way into repositories (gives the graph an alternative route)
-    TaskSpec("explore-1", "explore", "navigate", "Open the Explore page that lists all repositories on this site.",
-             url_pattern=r"/explore/repos"),
-    TaskSpec("explore-2", "explore", "navigate", "Browse the site's public repositories and open the primer/design repository.",
-             url_pattern=r"/primer/design/?$"),
+    TaskSpec(
+        "explore-1",
+        "explore",
+        "navigate",
+        "Open the Explore page that lists all repositories on this site.",
+        url_pattern=r"/explore/repos",
+    ),
+    TaskSpec(
+        "explore-2",
+        "explore",
+        "navigate",
+        "Browse the site's public repositories and open the primer/design repository.",
+        url_pattern=r"/primer/design/?$",
+    ),
     # Added for v2 (2026-10-18): explore-2's only saved episode took the dashboard shortcut, so no training
     # episode taught Explore -> repository; v1 had that hop only from a test-task (members-2) repair episode.
-    TaskSpec("explore-3", "explore", "navigate",
-             "Using the Explore page's list of repositories (not the dashboard), open the a11yproject.com repository.",
-             url_pattern=r"/a11yproject/a11yproject\.com/?$"),
+    TaskSpec(
+        "explore-3",
+        "explore",
+        "navigate",
+        "Using the Explore page's list of repositories (not the dashboard), open the a11yproject.com repository.",
+        url_pattern=r"/a11yproject/a11yproject\.com/?$",
+    ),
     # --- social
-    TaskSpec("social-1", "social", "mutate", "Star the a11yproject.com repository.", starred("a11yproject/a11yproject.com")),
+    TaskSpec(
+        "social-1", "social", "mutate", "Star the a11yproject.com repository.", starred("a11yproject/a11yproject.com")
+    ),
     TaskSpec("social-2", "social", "mutate", "Follow the user alice.", following("alice")),
 ]
 TASKS_BY_ID = {t.id: t for t in TASKS}
@@ -191,13 +306,15 @@ class GiteaTask(AbstractBrowserTask):
         page.click("form.ui.form button.ui.primary.button")
         page.wait_for_url(re.compile(r".*(?<!/login)$"))
         page.goto(f"{settings.gitea_url}/")
-        goal = self.spec.goal + " When you are done, send me a short message (include the answer if I asked a question)."
+        goal = (
+            self.spec.goal + " When you are done, send me a short message (include the answer if I asked a question)."
+        )
         return goal, {"task_id": self.spec.id, "cluster": self.spec.cluster, "kind": self.spec.kind}
 
     def validate(self, page, chat_messages) -> tuple[float, bool, str, dict]:
         # BrowserGym's chat opens with an assistant greeting before the user goal; only count replies after the goal.
         last_user = max((i for i, m in enumerate(chat_messages) if m["role"] == "user"), default=-1)
-        replies = [m["message"] for m in chat_messages[last_user + 1:] if m["role"] == "assistant"]
+        replies = [m["message"] for m in chat_messages[last_user + 1 :] if m["role"] == "assistant"]
         if not replies:
             return 0.0, False, "", {}
         s = self.spec

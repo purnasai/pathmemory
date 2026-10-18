@@ -21,16 +21,35 @@ def page(url, elements=(), goal="Do the task."):
             if landmark not in landmarks:
                 lrole, _, lname = landmark.partition(":")
                 landmarks[landmark] = f"lm{len(landmarks)}"
-                nodes.append({"nodeId": landmarks[landmark], "parentId": "root", "role": {"value": lrole},
-                              "name": {"value": lname}})
+                nodes.append(
+                    {
+                        "nodeId": landmarks[landmark],
+                        "parentId": "root",
+                        "role": {"value": lrole},
+                        "name": {"value": lname},
+                    }
+                )
             parent = landmarks[landmark]
-        nodes.append({"nodeId": f"n{bid}", "parentId": parent, "browsergym_id": bid, "role": {"value": role},
-                      "name": {"value": name}})
+        nodes.append(
+            {
+                "nodeId": f"n{bid}",
+                "parentId": parent,
+                "browsergym_id": bid,
+                "role": {"value": role},
+                "name": {"value": name},
+            }
+        )
         props[bid] = {"visibility": 1.0 if visible else 0.0}
         attrs.append([sid("bid"), sid(bid)] + ([sid("href"), sid(href)] if href else []))
-    return {"url": url, "axtree_object": {"nodes": nodes}, "extra_element_properties": props,
-            "dom_object": {"strings": strings, "documents": [{"nodes": {"attributes": attrs}}]},
-            "goal_object": [{"type": "text", "text": goal}], "axtree_txt": "", "last_action_error": ""}
+    return {
+        "url": url,
+        "axtree_object": {"nodes": nodes},
+        "extra_element_properties": props,
+        "dom_object": {"strings": strings, "documents": [{"nodes": {"attributes": attrs}}]},
+        "goal_object": [{"type": "text", "text": goal}],
+        "axtree_txt": "",
+        "last_action_error": "",
+    }
 
 
 class FakeChat:

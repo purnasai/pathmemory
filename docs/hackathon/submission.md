@@ -14,7 +14,7 @@ entity checked.
 
 ## Problem
 Browser agents rediscover the same navigation on every task, and memory is usually whole past trajectories. When
-the page a trajectory starts from changes, that trajectory is dead, and the knowledge needed to get around it is
+the page a trajectory starts from changes, that trajectory can no longer be replayed as recorded. Navigation steps for an alternative may be
 spread over runs that were about other tasks.
 
 ## How memory works
@@ -22,8 +22,9 @@ spread over runs that were about other tasks.
   sources}]->(:State)` = a click verified to lead to that page, with the training runs that showed it;
   `(:Task)-[:WORKED_AT]->(:State)` = where past tasks did their work.
 - Route = bounded variable-length Cypher match, excluding steps that failed in this run, shortest then least-failed.
-- Replay is fail-closed (one visible, unambiguous element in the remembered landmark; href and landing page must
-  match the chosen owner/repo). Evaluation never writes to memory.
+- Replay checks visibility, target ambiguity, and the chosen owner/repo. Duplicate links to the same href are
+  accepted, and legacy scopes have an explicit exception; see [verification boundaries](../architecture/README.md).
+  Evaluation never writes to memory.
 
 ## Verified result (v2, 2026-10-18)
 Held-out task `issues-2`, dashboard repository links hidden, `gpt-6-luna`, 5 trials per mode, every trial reported:
@@ -46,10 +47,9 @@ Details: `docs/evidence/v2/FAIR_COMPARISON.md`, `COMPOSITION.md`, `DEMO_WALKTHRO
 kept as recorded with corrections in `docs/evidence/v1-derived/CORRECTIONS.md`; the v1 recovery memory contained a
 test-task episode and is superseded by v2.
 
-## Why FalkorDB is central
-Routes are not stored anywhere: each one is a path query over edges written by different runs. Rerouting is the same
-query with the failed edge banned. Remove the bridge edge and the route disappears; remove FalkorDB and graph mode
-has nothing to replay.
+## Route selection
+Graph-mode routes are computed by Cypher over steps learned in separate runs. Rerouting repeats the query
+with a failed step excluded. The bridge-edge ablation checks that the composed route depends on that step.
 
 ## Limits
 One self-seeded Gitea site (synthetic data), one model, one composition case, 5 trials per cell. The UI break is
@@ -61,7 +61,7 @@ came from a test-task episode).
 git clone https://github.com/purnasai/pathmemory && cd pathmemory
 scripts/reproduce_v2.sh             # no API key: fixture, v2 memory, provenance, composed route, ablation
 scripts/reproduce_v2.sh --with-llm  # + browser runs (OpenAI key in .env)
-uv run pathmemory-ui                # http://localhost:8795, "v2 composition" tab
+uv run pathmemory-ui                # http://localhost:8795, "Walkthrough" tab
 ```
 
 ## Submission form text
@@ -85,9 +85,10 @@ uv run pathmemory-ui                # http://localhost:8795, "v2 composition" ta
 > navigation steps with success/failure counts and source-episode provenance, and where past tasks did their work.
 > Memory is built only from successful training runs (manifest with run, task, goal and file hashes and a graph
 > fingerprint), survives process and container restarts, and is read-only during evaluation. Its value shows when a
-> remembered route breaks: the graph recombines steps learned in separate episodes into a new verified route, which a
-> store of whole trajectories cannot do. Single agent; no multi-agent coordination is claimed.
+> remembered route breaks: the graph recombines steps learned in separate episodes into a new verified route, which the
+> single-trajectory replay baseline does not do. Single agent; no multi-agent coordination is claimed.
 
 ## Demo video
-Script in `DEMO.md` (about 2:45): training runs and edge provenance, the live Cypher decision, one live browser run
-of the composed route, the ablation.
+[Watch the finished demo](../media/pathmemory-demo.mp4) (3:00): training runs and edge provenance,
+a fresh Cypher query, recorded browser execution of the composed route, and the bridge-removal comparison.
+The [recording plan](demo.md) describes the sequence and verification boundaries.
