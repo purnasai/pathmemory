@@ -14,7 +14,8 @@ remembered navigation runs without additional model calls.
 [Watch the three-minute demo](https://youtu.be/H7FJTGAeLQ4) ·
 [Download the MP4](docs/media/pathmemory-demo.mp4) ·
 [Run the walkthrough without an API key](#quick-start) ·
-[Inspect the recorded evidence](docs/evaluation.md)
+[Inspect the recorded evidence](docs/evaluation.md) ·
+[Read the build story](docs/hackathon/blog.md)
 
 ![Guided walkthrough in the demo UI](docs/ui_v2_composition.png)
 
@@ -138,7 +139,7 @@ docs/
   getting-started.md, evaluation.md        setup and experiment documentation
   architecture/                           design notes and interactive diagram
   evidence/                               published results and memory snapshots
-  hackathon/                              submission, recording script, blog draft
+  hackathon/                              submission, recording script, blog
 tests/                                    unit and container integration tests
 scripts/reproduce_v2.sh                    local reproduction workflow
 ```

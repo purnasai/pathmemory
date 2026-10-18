@@ -93,3 +93,8 @@ uv run pathmemory-ui                # http://localhost:8795, "Walkthrough" tab
 a fresh Cypher query, recorded browser execution of the composed route, and the bridge-removal comparison.
 The [recording plan](demo.md) describes the sequence and verification boundaries.
 The [MP4](../media/pathmemory-demo.mp4) is also included in the repository.
+
+## Blog
+[The Day My Browser Agent Lost a Link, and a Graph Found Another Way](blog.md): the build story from the
+first commit through the v1 audit (three claims found wrong) to the v2 composition experiment, with results and limits.
+
