@@ -1,4 +1,4 @@
-# v1 corrections (p0-correctness, 2026-10-18)
+# v1 corrections (2026-10-18)
 
 The v1 logs in `docs/evidence/v1*/` are unchanged. Everything here is **derived** from them and from the
 saved run directories (`results/v1*/`, git-ignored, available locally). Regenerate:
@@ -15,7 +15,7 @@ equals the token total in the original row.
 
 ## 1. "LLM calls" was LLM-chosen browser steps, not model calls
 
-The v1 column `llm_steps` (shown as "Avg LLM calls" in RESULTS.md, README.md and SUBMISSION.md) counts browser
+The v1 column `llm_steps` (shown as "avg LLM calls" in the v1 results tables) counts browser
 steps whose action came from the base agent. It misses:
 
 - the **destination chooser** call that graph mode makes once per run (`_plan()`), and
@@ -86,7 +86,7 @@ ran after `members-2`/graph had added carol as a collaborator, and all three ans
 checker only requires "alice", so the outcome did not change, but those trials did not see the fixture. Other
 read-only tasks (`issues-5/6/7`, `profile-4`, `repos-5`) followed mutations of unrelated state.
 
-## What changed in code (see git log of branch `p0-correctness`)
+## What changed in code
 
 - explicit per-role usage (`pm_chooser_*`, `pm_base_*` step stats → `chooser_calls`, `base_calls`, `model_calls`,
   per-role tokens, and an `accounting_consistent` check against AgentLab's own total)

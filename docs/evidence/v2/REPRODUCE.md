@@ -30,7 +30,8 @@ git-ignored `results/` (their exact file hashes are in `memory/manifest.json`). 
 the committed dump and checks its provenance against the committed per-run step lists (`memory/flat_memory.json`);
 the full rebuild from raw runs was checked on the author's machine (step 4 output above).
 
-Validated 2026-10-18 from a fresh `git clone` of branch `p2-submission` (commit 7403c6a) into an empty directory,
+Validated 2026-10-18 from a fresh `git clone` of commit `e38edac` (`7403c6a` before the public-release rewrite, see
+[docs/RELEASE.md](../../RELEASE.md)) into an empty directory,
 with both v2 graphs deleted from FalkorDB beforehand: steps 1–6 and 9 passed in 43 s (fixture `32f2a9ca533fd2ce`,
 v2 loaded to `ff0899ff00fbb4d5`, ablated `93e0b6bd12e2831c`, provenance `problems: []`, rebuild from raw runs
 skipped as expected); the clone's test suite gave 54 passed, 2 skipped (the two tests that need saved runs).

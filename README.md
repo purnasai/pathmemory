@@ -194,7 +194,7 @@ Step-by-step commands and expected output: [docs/evidence/v2/REPRODUCE.md](docs/
 > v1 memory included a repair episode of `members-2`, a test task, so the v1 "after one repair episode" rows are not
 > held-out results. v2 replaces that with a training-only memory.
 
-> **Correction (2026-10-18, branch `p0-correctness`):** the "LLM calls" columns below count LLM-chosen browser steps, not model calls. Counting the destination chooser and parse retries, graph mode made **more** model calls than no memory on the normal UI (4.64 vs 4.21 per task); the input-token savings stand. `repos-5` was run twice with different goals. v1 evaluation also wrote failure counts to its own memory and did not reset the site before read-only tasks. Details and corrected numbers: [docs/evidence/v1-derived/CORRECTIONS.md](docs/evidence/v1-derived/CORRECTIONS.md).
+> **Correction (2026-10-18):** the "LLM calls" columns below count LLM-chosen browser steps, not model calls. Counting the destination chooser and parse retries, graph mode made **more** model calls than no memory on the normal UI (4.64 vs 4.21 per task); the input-token savings stand. `repos-5` was run twice with different goals. v1 evaluation also wrote failure counts to its own memory and did not reset the site before read-only tasks. Details and corrected numbers: [docs/evidence/v1-derived/CORRECTIONS.md](docs/evidence/v1-derived/CORRECTIONS.md).
 
 | Experiment | No memory | Flat memory (top-3 past trajectories in prompt) | **PathMemory (graph)** |
 |---|---|---|---|

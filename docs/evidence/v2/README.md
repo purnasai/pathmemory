@@ -1,6 +1,9 @@
-# Evidence v2 (branch p0-correctness): code-correctness checks, no evaluation yet
+# Evidence v2
 
-No v2 evaluation has been run. This folder holds only what was needed to check the changed code on the real stack.
+In three parts: P0 checked the corrected code on the real stack, P1 is the v2 composition evaluation, P2 is
+what makes it reproducible from a clone.
+
+## P0: code-correctness checks (before any v2 evaluation)
 
 - `replaycheck.json`: `python -m pathmemory.replaycheck results`. Every click PathMemory replayed in the saved v1
   runs (63) is looked up again with the new fail-closed `find_target()` on the page it was made on: 63/63 resolve to
@@ -23,7 +26,7 @@ No v2 evaluation has been run. This folder holds only what was needed to check t
 
 Two runs on one task prove the plumbing works. They say nothing about success rates or savings.
 
-## P1 (branch p1-composition): composition and four-mode comparison
+## P1: composition and four-mode comparison
 
 - [COMPOSITION.md](COMPOSITION.md): training episodes, composed route, per-hop sources, Cypher, absence from every
   single episode, ablation, browser outcome. Raw: `composition.json`.
@@ -35,7 +38,7 @@ Two runs on one task prove the plumbing works. They say nothing about success ra
 - `migration_v1_copy.json`: scoped edge-id migration on a disposable copy of v1.
 - `probes.jsonl`: no-LLM real-browser wrong-entity and ambiguous-target probes.
 
-## P2 (branch p2-submission): submission readiness
+## P2: submission readiness
 
 - `memory/graph_v2.json`, `memory/graph_v2_ablated.json`: exact dumps of the two graphs (reload to the same
   fingerprints); [REPRODUCE.md](REPRODUCE.md) and `scripts/reproduce_v2.sh` rebuild and check everything from a clone.
