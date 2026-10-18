@@ -30,5 +30,9 @@ git-ignored `results/` (their exact file hashes are in `memory/manifest.json`). 
 the committed dump and checks its provenance against the committed per-run step lists (`memory/flat_memory.json`);
 the full rebuild from raw runs was checked on the author's machine (step 4 output above).
 
-Validated 2026-10-18 from a fresh `git clone` of branch `p2-submission` into an empty directory (see the P2
-report for the exact output).
+Validated 2026-10-18 from a fresh `git clone` of branch `p2-submission` (commit 7403c6a) into an empty directory,
+with both v2 graphs deleted from FalkorDB beforehand: steps 1–6 and 9 passed in 43 s (fixture `32f2a9ca533fd2ce`,
+v2 loaded to `ff0899ff00fbb4d5`, ablated `93e0b6bd12e2831c`, provenance `problems: []`, rebuild from raw runs
+skipped as expected); the clone's test suite gave 54 passed, 2 skipped (the two tests that need saved runs).
+`--with-llm`: composed route passed with 4 replayed and verified steps, 6 model calls, $0.0017; ablated graph had no
+route, 0 replayed, and passed by LLM fallback (8 calls); both snapshots unchanged.
