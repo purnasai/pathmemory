@@ -44,4 +44,4 @@ Two runs on one task prove the plumbing works. They say nothing about success ra
   before and after each.
 - Path normalization: the `exp_dir` field of the v2 JSONL rows (`runs/`, `smoke.jsonl`, `probes.jsonl`) was rewritten
   from an absolute path on the author's machine to the project-relative `results/…` path. No other field changed.
-  v1 evidence is unchanged and still contains absolute paths.
+  For the public release, the same was done for the v1 logs' `exp_dir` field; see `docs/RELEASE.md`.
