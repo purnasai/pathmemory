@@ -3,8 +3,10 @@
 **FalkorDB procedural memory for browser agents: verified UI steps from separate past runs, composed by a graph
 query into a route no single run took, replayed in a real browser with every page and entity checked.**
 
-Graph Hacks (WeMakeDevs × FalkorDB), October 2026. **Tracks entered: 01 — Agents That Act on Connected Data;
-02 — Agent Memory and Coordination.**
+Graph Hacks (WeMakeDevs × FalkorDB), October 2026. **Tracks entered: 01 — Agents That Act on Connected Data
+(primary: the graph decides and verifies the agent's browser actions); 02 — Agent Memory and Coordination
+(secondary: persistent procedural memory shared across tasks and sessions).** This is a single agent; no
+multi-agent coordination is claimed.
 
 ![v2 composition tab](docs/ui_v2_composition.png)
 *The v2 tab: the route FalkorDB returns when the dashboard link is gone (green), the banned step (red dashed),
@@ -54,7 +56,9 @@ fail-closed:
 Removing the one bridge step (`/explore/repos → {repo}`, taught only by explore-3) from a copy of the graph removes
 the composed route: the same query returns nothing and replay falls back to the LLM. That isolates the effect to the
 **graph join**: same chooser, same matcher, same checks, one edge less. A single-trajectory replay baseline with
-the same machinery (flat replay) fails the same way.
+the same machinery (flat replay) fails the same way. The base LLM still completes the task without the join (it
+finds its own way through the UI); what is lost is the agent's ability to reach the page by **verified replay of
+steps learned in other episodes**, without spending model calls on navigation.
 
 ## Results (v2, 2026-10-18)
 
