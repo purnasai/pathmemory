@@ -91,6 +91,3 @@ uv run pathmemory-ui                # http://localhost:8795, "v2 composition" ta
 ## Demo video
 Script in `DEMO.md` (about 2:45): training runs and edge provenance, the live Cypher decision, one live browser run
 of the composed route, the ablation.
-
-## AI assistance disclosure
-This project was built with an AI coding assistant (Claude Code). The author reviewed, tested and can explain every part: graph model, route query, replay and evaluation.

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "PathMemory Architecture",
+    "output": "docs/architecture/architecture.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "repository": {
+      "url": "https://github.com/purnasai/pathmemory.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "507ff2e565ff8f152943ca2beaf133ef0641d4e5"
+    }
+  },
+  "components": [
+    { "id": "train", "type": "external", "label": "Training runs", "sublabel": "BrowserGym + AgentLab", "pos": [40, 40], "size": [180, 70],
+      "sources": [{ "path": "src/pathmemory/learn.py", "line": 157, "end_line": 187, "label": "build_memory" }] },
+    { "id": "state", "type": "backend", "label": "state.py", "sublabel": "URL → template, role+name", "pos": [360, 40], "size": [180, 70],
+      "sources": [{ "path": "src/pathmemory/state.py", "line": 40, "end_line": 106, "label": "route_template, state_of" },
+                  { "path": "src/pathmemory/state.py", "line": 178, "end_line": 190, "label": "semantic_step" }] },
+    { "id": "learn", "type": "backend", "label": "learn.py", "sublabel": "ingest verified clicks", "pos": [680, 40], "size": [180, 70],
+      "sources": [{ "path": "src/pathmemory/learn.py", "line": 89, "end_line": 141, "label": "ingest" }] },
+    { "id": "falkor", "type": "database", "label": "FalkorDB", "sublabel": "graph pathmemory_v2", "tag": "(:State)-[:ACT]->", "pos": [1000, 34], "size": [180, 82],
+      "sources": [{ "path": "src/pathmemory/graph.py", "line": 28, "end_line": 67, "label": "GraphMemory" }] },
+    { "id": "ui", "type": "frontend", "label": "ui.py", "sublabel": "demo UI :8795", "pos": [1300, 0], "size": [150, 60],
+      "sources": [{ "path": "src/pathmemory/ui.py", "line": 25, "end_line": 120, "label": "read-only memories" }] },
+    { "id": "mcp", "type": "frontend", "label": "mcp_server.py", "sublabel": "MCP tools", "pos": [1300, 100], "size": [150, 60],
+      "sources": [{ "path": "src/pathmemory/mcp_server.py", "line": 32, "end_line": 85, "label": "build" }] },
+    { "id": "run", "type": "backend", "label": "run.py eval", "sublabel": "reset + snapshot copy", "pos": [40, 270], "size": [180, 70],
+      "sources": [{ "path": "src/pathmemory/run.py", "line": 133, "end_line": 148, "label": "reset_site" },
+                  { "path": "src/pathmemory/run.py", "line": 319, "end_line": 345, "label": "per-trial snapshot" }] },
+    { "id": "chooser", "type": "backend", "label": "1 · Chooser", "sublabel": "1 model call", "pos": [520, 270], "size": [180, 70],
+      "sources": [{ "path": "src/pathmemory/agent.py", "line": 316, "end_line": 334, "label": "_plan" }] },
+    { "id": "route", "type": "backend", "label": "2 · Cypher route", "sublabel": "shortest, not banned", "pos": [1000, 270], "size": [180, 70],
+      "sources": [{ "path": "src/pathmemory/agent.py", "line": 336, "end_line": 356, "label": "_route_from" },
+                  { "path": "src/pathmemory/graph.py", "line": 98, "end_line": 115, "label": "routes" }] },
+    { "id": "replay", "type": "security", "label": "3 · Fail-closed replay", "sublabel": "verify template + repo", "pos": [1000, 480], "size": [180, 70],
+      "sources": [{ "path": "src/pathmemory/agent.py", "line": 384, "end_line": 450, "label": "_match, _replay_step" },
+                  { "path": "src/pathmemory/agent.py", "line": 357, "end_line": 373, "label": "_fail" }] },
+    { "id": "llm", "type": "external", "label": "4 · LLM hand-over", "sublabel": "AgentLab GenericAgent", "pos": [520, 480], "size": [180, 70],
+      "sources": [{ "path": "src/pathmemory/agent.py", "line": 304, "end_line": 311, "label": "_delegate" }] },
+    { "id": "checker", "type": "external", "label": "Task checker", "sublabel": "Gitea API", "pos": [40, 480], "size": [180, 70],
+      "sources": [{ "path": "src/pathmemory/site/tasks.py", "line": 23, "end_line": 23, "label": "Gitea API read" }] }
+  ],
+  "connections": [
+    { "id": "train-state", "from": "train", "to": "state", "label": "observations", "variant": "emphasis" },
+    { "id": "state-learn", "from": "state", "to": "learn", "label": "templated steps", "variant": "emphasis" },
+    { "id": "learn-falkor", "from": "learn", "to": "falkor", "label": "MERGE + sources", "variant": "emphasis" },
+    { "id": "falkor-ui", "from": "falkor", "to": "ui", "label": "read", "variant": "dashed" },
+    { "id": "falkor-mcp", "from": "falkor", "to": "mcp", "label": "read", "variant": "dashed" },
+    { "id": "run-chooser", "from": "run", "to": "chooser", "label": "start episode", "variant": "emphasis" },
+    { "id": "chooser-route", "from": "chooser", "to": "route", "label": "target page + owner/repo", "variant": "emphasis" },
+    { "id": "route-falkor", "from": "route", "to": "falkor", "label": "Cypher path query", "fromSide": "top", "toSide": "bottom" },
+    { "id": "route-replay", "from": "route", "to": "replay", "label": "verified path", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [1010, 400] },
+    { "id": "replay-route", "from": "replay", "to": "route", "label": "fail: ban step, re-ask", "variant": "security", "fromSide": "right", "toSide": "right" },
+    { "id": "replay-llm", "from": "replay", "to": "llm", "label": "hand over + hint", "variant": "emphasis" },
+    { "id": "llm-checker", "from": "llm", "to": "checker", "label": "episode ends", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Composition", "items": ["Route joins steps from separate runs at a shared page template", "issues-2, dashboard links hidden: graph replay 5/5, flat replay 0/5"] },
+    { "dot": "rose", "title": "Fail-closed", "items": ["Click only one visible element with stored role, name, landmark", "On failure ban the step for this run and query again; none left → LLM"] },
+    { "dot": "amber", "title": "Evaluation isolation", "items": ["Gitea fixture reset and fresh snapshot copy before every trial", "Evaluation never writes to memory; ablation removes one bridge edge (0/5)"] }
+  ]
+}

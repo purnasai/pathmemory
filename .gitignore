@@ -3,3 +3,6 @@
 __pycache__/
 results/
 *.pyc
+
+.archify/
+requirements-frozen-*.txt
