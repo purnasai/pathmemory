@@ -1,0 +1,26 @@
+{
+ "source": "pathmemory_v1",
+ "source_fingerprint": "c51e00d7fe31aa16",
+ "scratch": "pm_migration_scratch",
+ "edges": 11,
+ "ids_changed": 11,
+ "count_preserved": true,
+ "content_preserved": true,
+ "ids_unique": true,
+ "idempotent": true,
+ "source_untouched": true,
+ "old_to_new": {
+  "b69223882ef8": "3c58fabe7faf",
+  "d88f90a74a52": "e856ef9419b0",
+  "34ed51a3ad87": "f9a67e94a5eb",
+  "d49e3eae4508": "928aaf61760a",
+  "9c9100b2c93c": "8caf8e249aee",
+  "ae787a06022e": "e89632aa108f",
+  "4d2c473e0054": "5a429a2293ad",
+  "105f90a42cb6": "7ec9be2148de",
+  "e5929bd638ec": "553337b98c73",
+  "911d63d62cb1": "fc698e14a7f1",
+  "c549305bffe0": "c7c606ac0dca"
+ },
+ "collision_refused": true
+}

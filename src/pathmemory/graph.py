@@ -1,8 +1,9 @@
 """FalkorDB procedural memory.
 
     (:State {key, route, title})
-    (:State)-[:ACT {eid, kind, role, name, pre, successes, failures}]->(:State)   verified navigation step
-        (pre = clicks that must happen first on the same page, e.g. opening a dropdown)
+    (:State)-[:ACT {eid, kind, role, name, scope, pre, successes, failures, sources}]->(:State)   verified navigation step
+        (pre = clicks that must happen first on the same page, e.g. opening a dropdown;
+         sources = ids of the training episodes that showed this step, v2 memory only)
     (:Task {id, goal, cluster})-[:WORKED_AT {steps}]->(:State)               where a past task did its real work
 
 Routes are found with a bounded variable-length Cypher match, so a route can be
@@ -44,7 +45,9 @@ class GraphMemory:
         self.q("MERGE (s:State {key:$key}) ON CREATE SET s.route=$route, s.title=$title", key=s.key, route=s.route,
                title=s.title)
 
-    def record_transition(self, src: State, step: Step, dst: State, ok: bool = True, pre: list[Step] = ()) -> str:
+    def record_transition(self, src: State, step: Step, dst: State, ok: bool = True, pre: list[Step] = (),
+                          source: str | None = None) -> str:
+        """source = id of the episode that showed this step; kept (once) in r.sources as provenance."""
         self.add_state(src)
         self.add_state(dst)
         eid = edge_id(src.key, step, dst.key)
@@ -56,6 +59,11 @@ class GraphMemory:
             src=src.key, dst=dst.key, eid=eid, kind=step.kind, role=step.role, name=step.name, scope=step.scope,
             s=int(ok), f=int(not ok), pre=[f"{p.role}|{p.name}|{p.scope}" for p in pre],
         )
+        if source:
+            self.q("""MATCH ()-[r:ACT {eid:$eid}]->()
+                      SET r.sources = CASE WHEN r.sources IS NULL THEN [$src]
+                                           WHEN $src IN r.sources THEN r.sources ELSE r.sources + $src END""",
+                   eid=eid, src=source)
         return eid
 
     def mark_failure(self, eid: str):
@@ -96,14 +104,28 @@ class GraphMemory:
                 MATCH p = (a)-[:ACT*1..{int(max_hops)}]->(b)
                 WHERE all(r IN relationships(p) WHERE r.successes > 0 AND NOT r.eid IN $banned)
                 RETURN [n IN nodes(p) | n.key] AS keys,
-                       [r IN relationships(p) | [r.eid, r.kind, r.role, r.name, r.pre, r.scope]] AS edges,
+                       [r IN relationships(p) | [r.eid, r.kind, r.role, r.name, r.pre, r.scope, r.sources]] AS edges,
                        length(p) AS hops,
                        reduce(f = 0, r IN relationships(p) | f + r.failures) AS fails
                 ORDER BY hops, fails LIMIT $k""",
             src=src, dst=dst, banned=list(banned), k=k,
         )
-        return [{"keys": keys, "edges": [dict(zip(("eid", "kind", "role", "name", "pre", "scope"), e)) for e in edges]}
+        return [{"keys": keys,
+                 "edges": [dict(zip(("eid", "kind", "role", "name", "pre", "scope", "sources"), e)) for e in edges]}
                 for keys, edges, _, _ in rows]
+
+    def edges(self) -> list[dict]:
+        """Every step with its counters and provenance, sorted (evidence dumps, provenance checks)."""
+        rows = self.q("MATCH (a:State)-[r:ACT]->(b:State) RETURN a.key, r.eid, r.kind, r.role, r.name, r.scope, r.pre, "
+                      "r.successes, r.failures, r.sources, b.key")
+        keys = ("src", "eid", "kind", "role", "name", "scope", "pre", "successes", "failures", "sources", "dst")
+        return sorted((dict(zip(keys, r)) for r in rows), key=lambda e: (e["src"], e["dst"], e["eid"]))
+
+    def delete_edge(self, eid: str) -> int:
+        """Remove one step (ablation on a copied graph)."""
+        n = self.q("MATCH ()-[r:ACT {eid:$eid}]->() RETURN count(r)", eid=eid)[0][0]
+        self.q("MATCH ()-[r:ACT {eid:$eid}]->() DELETE r", eid=eid)
+        return n
 
     def snapshot(self) -> dict:
         """Pages, tasks and edge counters, so a write can be diffed (see learn.memory_diff)."""
@@ -132,9 +154,10 @@ class GraphMemory:
         Equal fingerprints = the agent sees exactly the same memory."""
         rows = [
             *(["S", k, r, t] for k, r, t in self.q("MATCH (s:State) RETURN s.key, s.route, s.title")),
-            *(["E", *row] for row in self.q(
+            # provenance is appended only when present, so fingerprints of v1 memory (no sources) are unchanged
+            *(["E", *row[:-1]] + ([row[-1]] if row[-1] is not None else []) for row in self.q(
                 "MATCH (a:State)-[r:ACT]->(b:State) RETURN a.key, r.eid, r.kind, r.role, r.name, r.scope, r.pre, "
-                "r.successes, r.failures, b.key")),
+                "r.successes, r.failures, b.key, r.sources")),
             *(["W", *row] for row in self.q(
                 "MATCH (t:Task)-[w:WORKED_AT]->(s:State) RETURN t.id, t.goal, t.cluster, w.steps, s.key")),
         ]
@@ -145,9 +168,13 @@ class GraphMemory:
         """Recompute every edge id with the current edge_id() (v1 ids did not include the scope).
         v1 ids were coarser, so each edge maps to exactly one new id; nothing is merged or split."""
         rows = self.q("MATCH (a:State)-[r:ACT]->(b:State) RETURN r.eid, a.key, r.kind, r.role, r.name, r.scope, b.key")
+        plan = {eid: edge_id(src, Step(kind, role, name, scope=scope or ""), dst)
+                for eid, src, kind, role, name, scope, dst in rows}
+        if len(set(plan.values())) != len(plan) or len(plan) != len(rows):
+            raise ValueError("edge id collision: refusing to migrate (would merge distinct steps)")
         changed = 0
         for eid, src, kind, role, name, scope, dst in rows:
-            new = edge_id(src, Step(kind, role, name, scope=scope or ""), dst)
+            new = plan[eid]
             if new != eid:
                 self.q("MATCH (:State {key:$src})-[r:ACT {eid:$eid}]->(:State {key:$dst}) SET r.eid=$new",
                        src=src, dst=dst, eid=eid, new=new)

@@ -2,12 +2,18 @@
 
 mode="none"  base agent, no memory                                   (baseline A)
 mode="flat"  top-3 similar past trajectories put in the prompt (AWM)  (baseline B)
+mode="flatreplay"  same chooser, matcher, verification and fallback as graph mode, but  (baseline C)
+             a route is a contiguous stretch of ONE stored trajectory: no
+             composition of steps learned in different episodes.
 mode="graph" FalkorDB picks a destination + verified route, replays   (PathMemory)
              the navigation clicks without calling the LLM, verifies
              every state, recovers via an alternative route on failure,
              then hands over with what past tasks did on that page.
 
-B and C use the same hint channel (an extra text block in the goal), and in
+Flat retrieval policy (mode "flat"): rank stored successful trajectories by Jaccard similarity of goal words
+(stop words removed), take the top k=3, and give each one's goal plus every step ("on <url>: <action>").
+
+flat, flatreplay and graph use the same hint channel (an extra text block in the goal), and in
 every mode the LLM performs the actual data-changing actions.
 """
 
@@ -17,6 +23,7 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import bgym
 from agentlab.agents.agent_args import AgentArgs
@@ -26,12 +33,13 @@ from agentlab.llm.tracking import cost_tracker_decorator, set_tracker
 
 from pathmemory.graph import GraphMemory
 from pathmemory.learn import FLAT_STORE
-from pathmemory.state import find_target, instantiate, semantic_step, state_of
+from pathmemory.state import Match, find_target, hrefs, instantiate, semantic_step, state_of
 
 # Entity bindings a replayed navigation step must preserve (route templates alone cannot tell
 # /primer/design from the fork /byteblaze/design).
 CHECKED_BINDINGS = ("owner", "repo", "org", "n")
 USAGE_ROLES = ("chooser", "base")
+REPLAY_MODES = ("graph", "flatreplay")
 
 def write_json(path, data):
     """Atomic write, so a reader polling the file never sees half of it."""
@@ -62,6 +70,57 @@ def flat_hint(goal: str, k: int = 3, store_path=FLAT_STORE) -> str | None:
         lines = [f"  on {s['url']}: {s['action']}" for s in t["steps"]]
         blocks.append(f"Past task: {t['goal']}\n" + "\n".join(lines))
     return "Successful past trajectories on this website (use them if relevant):\n\n" + "\n\n".join(blocks)
+
+
+class FlatRoutes:
+    """Flat-replay memory over the stored trajectories, with GraphMemory's read interface.
+
+    destinations(): every page seen in a stored trajectory, with the goals of tasks whose work happened there
+    (what GraphMemory.destinations() lists when built from the same episodes). routes(): contiguous runs of
+    navigation steps inside a single trajectory, shortest first; never joins steps of two trajectories.
+    """
+
+    def __init__(self, store_path):
+        p = Path(store_path)
+        self.store = [t for t in (json.loads(p.read_text()) if p.exists() else []) if t.get("nav") is not None]
+
+    def destinations(self) -> list[dict]:
+        pages = {}
+        for t in self.store:
+            for e in t["nav"]:
+                pages.setdefault(e["src"], {"goals": [], "steps": []})
+                pages.setdefault(e["dst"], {"goals": [], "steps": []})
+            if t.get("worksite"):
+                site = pages.setdefault(t["worksite"], {"goals": [], "steps": []})
+                site["goals"].append(t["goal"])
+                site["steps"].append(t.get("work_steps") or [])
+        return [{"key": k, "title": k, **v} for k, v in sorted(pages.items())]
+
+    def routes(self, src, dst, banned=(), k=3, max_hops=6):
+        if src == dst:
+            return [{"keys": [src], "edges": []}]
+        found = {}
+        for t in self.store:
+            nav = t["nav"]
+            for i, first in enumerate(nav):
+                if first["src"] != src:
+                    continue
+                for j in range(i, min(len(nav), i + max_hops)):
+                    if j > i and nav[j]["src"] != nav[j - 1]["dst"]:
+                        break  # the trajectory left the chain (e.g. a form submit moved the page)
+                    seg = nav[i:j + 1]
+                    if any(e["eid"] in banned for e in seg):
+                        break
+                    if nav[j]["dst"] == dst:
+                        keys = [src] + [e["dst"] for e in seg]
+                        edges = [{"eid": e["eid"], "kind": "click", "role": e["role"], "name": e["name"],
+                                  "pre": e["pre"], "scope": e["scope"], "sources": [t["episode"]]} for e in seg]
+                        found.setdefault(tuple(e["eid"] for e in seg), {"keys": keys, "edges": edges})
+                        break
+        return sorted(found.values(), key=lambda r: len(r["edges"]))[:k]
+
+    def mark_failure(self, eid):
+        raise RuntimeError("flat replay memory is read-only")
 
 
 CHOOSER_PROMPT = """You help a web agent reuse memory of a Gitea website.
@@ -159,7 +218,11 @@ class PathMemoryAgent(bgym.Agent):
         self.record_failures = record_failures
         self.flat_store = flat_store or FLAT_STORE
         self.live_steps: list[dict] = []
-        self.graph = graph or (GraphMemory(graph_name) if mode == "graph" else None)
+        if graph is None and mode == "graph":
+            graph = GraphMemory(graph_name)
+        elif graph is None and mode == "flatreplay":
+            graph = FlatRoutes(self.flat_store)
+        self.graph = graph
         self.log: list[dict] = []
         self.reset()
 
@@ -215,9 +278,9 @@ class PathMemoryAgent(bgym.Agent):
             self.started = True
             if self.mode == "flat":
                 self.hint = flat_hint(self._goal(obs), store_path=self.flat_store)
-            elif self.mode == "graph":
+            elif self.mode in REPLAY_MODES:
                 self._plan(obs)
-        if self.mode == "graph":
+        if self.mode in REPLAY_MODES:
             action = self._replay_step(obs)
             if action:
                 return action
@@ -272,7 +335,8 @@ class PathMemoryAgent(bgym.Agent):
                 self.queue.append({"role": role, "name": name, "scope": scope, "pre": True, "eid": e["eid"]})
             self.queue.append({"role": e["role"], "name": e["name"], "scope": e.get("scope") or "", "pre": False,
                                "eid": e["eid"], "dst": dst})
-        self.log.append({"event": "route", "keys": self.route["keys"]})
+        self.log.append({"event": "route", "keys": self.route["keys"], "eids": [e["eid"] for e in self.route["edges"]],
+                         "sources": [e.get("sources") for e in self.route["edges"]]})
         return True
 
     def _fail(self, key, why, st=None):
@@ -313,7 +377,14 @@ class PathMemoryAgent(bgym.Agent):
             # ("main:{owner} - Dashboard"); such a scope cannot be checked. Visibility and uniqueness still are.
             self.log.append({"event": "scope_unverifiable", "target": item["name"], "scope": item["scope"]})
             scope = ""
-        return find_target(obs, item["role"], name, scope)
+        m = find_target(obs, item["role"], name, scope)
+        href = m.ok and hrefs(obs).get(m.bid)
+        if href and not item["pre"] and urlsplit(href).path.startswith("/"):
+            # the link says where it goes: refuse before clicking if that is another entity than the one chosen
+            bad = self._binding_mismatch(state_of({"url": href}))
+            if bad:
+                return Match("wrong_entity", candidates=m.candidates)
+        return m
 
     def _replay_step(self, obs):
         st = state_of(obs)

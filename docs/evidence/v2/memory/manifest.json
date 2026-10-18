@@ -1,0 +1,336 @@
+{
+ "graph": "pathmemory_v2",
+ "fingerprint": "ff0899ff00fbb4d5",
+ "stats": {
+  "trajectories": 10,
+  "states": 11,
+  "edges": 11,
+  "tasks": 10
+ },
+ "flat_store": "docs/evidence/v2/memory/flat_memory.json",
+ "flat_sha": "3ffe820a9a73e779",
+ "forbidden_tasks": [
+  "issues-2",
+  "issues-4",
+  "issues-5",
+  "issues-6",
+  "issues-7",
+  "members-2",
+  "members-3",
+  "members-4",
+  "profile-2",
+  "profile-4",
+  "repos-2",
+  "repos-3",
+  "repos-5",
+  "social-2"
+ ],
+ "episodes": [
+  {
+   "episode": "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0",
+   "dir": "results/v1/learn/2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0",
+   "task": "members-1",
+   "task_sha": "bb6e677991e6",
+   "goal_sha": "05ef3941a2f2",
+   "success": true,
+   "steps": 6,
+   "files_sha": "0c3c01e414db55b2",
+   "used": true,
+   "edges_taught": 3
+  },
+  {
+   "episode": "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0",
+   "dir": "results/v1/learn/2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0",
+   "task": "issues-1",
+   "task_sha": "080d84dbe7c5",
+   "goal_sha": "90c1ecb0b1d0",
+   "success": true,
+   "steps": 6,
+   "files_sha": "76aae8b88e68b522",
+   "used": true,
+   "edges_taught": 3
+  },
+  {
+   "episode": "2026-10-16_02-04-52_PathMemory-none_on_pathmemory.issues-3_0",
+   "dir": "results/v1/learn/2026-10-16_02-04-52_PathMemory-none_on_pathmemory.issues-3_0",
+   "task": "issues-3",
+   "task_sha": "0de1fc3e581a",
+   "goal_sha": "4a976a67e6dd",
+   "success": true,
+   "steps": 5,
+   "files_sha": "c1d98f493df148f3",
+   "used": true,
+   "edges_taught": 1
+  },
+  {
+   "episode": "2026-10-16_02-05-25_PathMemory-none_on_pathmemory.profile-1_0",
+   "dir": "results/v1/learn/2026-10-16_02-05-25_PathMemory-none_on_pathmemory.profile-1_0",
+   "task": "profile-1",
+   "task_sha": "a9d9536d573f",
+   "goal_sha": "1750083aeb55",
+   "success": true,
+   "steps": 5,
+   "files_sha": "328f14c61f5e7db9",
+   "used": true,
+   "edges_taught": 1
+  },
+  {
+   "episode": "2026-10-16_02-05-53_PathMemory-none_on_pathmemory.profile-3_0",
+   "dir": "results/v1/learn/2026-10-16_02-05-53_PathMemory-none_on_pathmemory.profile-3_0",
+   "task": "profile-3",
+   "task_sha": "475489ab7e37",
+   "goal_sha": "d488badaa015",
+   "success": true,
+   "steps": 4,
+   "files_sha": "769145553fce9944",
+   "used": true,
+   "edges_taught": 2
+  },
+  {
+   "episode": "2026-10-16_02-06-21_PathMemory-none_on_pathmemory.repos-1_0",
+   "dir": "results/v1/learn/2026-10-16_02-06-21_PathMemory-none_on_pathmemory.repos-1_0",
+   "task": "repos-1",
+   "task_sha": "27aea303f475",
+   "goal_sha": "4779d02866ce",
+   "success": true,
+   "steps": 5,
+   "files_sha": "6098bbebc27100a4",
+   "used": true,
+   "edges_taught": 1
+  },
+  {
+   "episode": "2026-10-16_02-06-52_PathMemory-none_on_pathmemory.repos-4_0",
+   "dir": "results/v1/learn/2026-10-16_02-06-52_PathMemory-none_on_pathmemory.repos-4_0",
+   "task": "repos-4",
+   "task_sha": "f0f63a9acb77",
+   "goal_sha": "0057a1595cdf",
+   "success": false,
+   "steps": 15,
+   "files_sha": "c09ea12e282c81e8",
+   "used": false,
+   "edges_taught": 0
+  },
+  {
+   "episode": "2026-10-16_02-08-05_PathMemory-none_on_pathmemory.social-1_0",
+   "dir": "results/v1/learn/2026-10-16_02-08-05_PathMemory-none_on_pathmemory.social-1_0",
+   "task": "social-1",
+   "task_sha": "77484e4a4642",
+   "goal_sha": "f162572f1f60",
+   "success": true,
+   "steps": 3,
+   "files_sha": "3de054503e4f5dba",
+   "used": true,
+   "edges_taught": 1
+  },
+  {
+   "episode": "2026-10-16_02-33-28_PathMemory-none_on_pathmemory.explore-1_0",
+   "dir": "results/v1-alt/learn/2026-10-16_02-33-28_PathMemory-none_on_pathmemory.explore-1_0",
+   "task": "explore-1",
+   "task_sha": "e31f811ff1c4",
+   "goal_sha": "74145969ba23",
+   "success": true,
+   "steps": 2,
+   "files_sha": "488788f47b523a0b",
+   "used": true,
+   "edges_taught": 1
+  },
+  {
+   "episode": "2026-10-16_02-33-45_PathMemory-none_on_pathmemory.explore-2_0",
+   "dir": "results/v1-alt/learn/2026-10-16_02-33-45_PathMemory-none_on_pathmemory.explore-2_0",
+   "task": "explore-2",
+   "task_sha": "d7c547c06005",
+   "goal_sha": "a6c668398377",
+   "success": true,
+   "steps": 2,
+   "files_sha": "c4a501b4a47d634e",
+   "used": true,
+   "edges_taught": 1
+  },
+  {
+   "episode": "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0",
+   "dir": "results/v2-train/2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0",
+   "task": "explore-3",
+   "task_sha": "1ef5300cff2e",
+   "goal_sha": "9c2496eb5dfd",
+   "success": true,
+   "steps": 3,
+   "files_sha": "9c95c6ee76bb58e1",
+   "used": true,
+   "edges_taught": 2
+  }
+ ],
+ "edges": [
+  {
+   "src": "/",
+   "eid": "c114f1b71d3c",
+   "kind": "click",
+   "role": "link",
+   "name": "{owner}/{repo}",
+   "scope": "main:byteblaze - Dashboard",
+   "pre": [],
+   "successes": 4,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0",
+    "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0",
+    "2026-10-16_02-08-05_PathMemory-none_on_pathmemory.social-1_0",
+    "2026-10-16_02-33-45_PathMemory-none_on_pathmemory.explore-2_0"
+   ],
+   "dst": "/:owner/:repo"
+  },
+  {
+   "src": "/",
+   "eid": "e856ef9419b0",
+   "kind": "click",
+   "role": "link",
+   "name": "{owner}/{repo}#{n}",
+   "scope": "main:byteblaze - Dashboard",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-04-52_PathMemory-none_on_pathmemory.issues-3_0"
+   ],
+   "dst": "/:owner/:repo/issues/:n"
+  },
+  {
+   "src": "/",
+   "eid": "f9a67e94a5eb",
+   "kind": "click",
+   "role": "link",
+   "name": "Explore",
+   "scope": "navigation:Navigation Bar",
+   "pre": [],
+   "successes": 2,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-33-28_PathMemory-none_on_pathmemory.explore-1_0",
+    "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+   ],
+   "dst": "/explore/repos"
+  },
+  {
+   "src": "/",
+   "eid": "928aaf61760a",
+   "kind": "click",
+   "role": "link",
+   "name": "New Repository",
+   "scope": "main:byteblaze - Dashboard",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-06-21_PathMemory-none_on_pathmemory.repos-1_0"
+   ],
+   "dst": "/repo/create"
+  },
+  {
+   "src": "/",
+   "eid": "8caf8e249aee",
+   "kind": "click",
+   "role": "menuitem",
+   "name": "Settings",
+   "scope": "menu:Profile and Settings\u2026",
+   "pre": [
+    "menu|Profile and Settings\u2026|navigation:Navigation Bar"
+   ],
+   "successes": 2,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-05-25_PathMemory-none_on_pathmemory.profile-1_0",
+    "2026-10-16_02-05-53_PathMemory-none_on_pathmemory.profile-3_0"
+   ],
+   "dst": "/user/settings"
+  },
+  {
+   "src": "/:owner/:repo",
+   "eid": "e89632aa108f",
+   "kind": "click",
+   "role": "link",
+   "name": "Issues",
+   "scope": "navigation",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+   ],
+   "dst": "/:owner/:repo/issues"
+  },
+  {
+   "src": "/:owner/:repo",
+   "eid": "5a429a2293ad",
+   "kind": "click",
+   "role": "link",
+   "name": "Settings",
+   "scope": "navigation",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0"
+   ],
+   "dst": "/:owner/:repo/settings"
+  },
+  {
+   "src": "/:owner/:repo/issues",
+   "eid": "7ec9be2148de",
+   "kind": "click",
+   "role": "link",
+   "name": "New Issue",
+   "scope": "main:Issues",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+   ],
+   "dst": "/:owner/:repo/issues/new"
+  },
+  {
+   "src": "/:owner/:repo/settings",
+   "eid": "553337b98c73",
+   "kind": "click",
+   "role": "link",
+   "name": "Collaborators",
+   "scope": "main:Repository",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0"
+   ],
+   "dst": "/:owner/:repo/settings/collaboration"
+  },
+  {
+   "src": "/explore/repos",
+   "eid": "fc698e14a7f1",
+   "kind": "click",
+   "role": "link",
+   "name": "{repo}",
+   "scope": "main:Explore",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+   ],
+   "dst": "/:owner/:repo"
+  },
+  {
+   "src": "/user/settings",
+   "eid": "c7c606ac0dca",
+   "kind": "click",
+   "role": "link",
+   "name": "SSH / GPG Keys",
+   "scope": "main:Profile",
+   "pre": [],
+   "successes": 1,
+   "failures": 0,
+   "sources": [
+    "2026-10-16_02-05-53_PathMemory-none_on_pathmemory.profile-3_0"
+   ],
+   "dst": "/user/settings/keys"
+  }
+ ]
+}

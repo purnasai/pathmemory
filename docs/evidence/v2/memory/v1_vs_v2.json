@@ -1,0 +1,91 @@
+{
+ "v1_fingerprint": "c51e00d7fe31aa16",
+ "v2_fingerprint": "ff0899ff00fbb4d5",
+ "identical": false,
+ "v1_tasks": [
+  "explore-1",
+  "explore-2",
+  "issues-1",
+  "issues-3",
+  "members-1",
+  "members-2",
+  "profile-1",
+  "profile-3",
+  "repos-1",
+  "social-1"
+ ],
+ "v2_tasks": [
+  "explore-1",
+  "explore-2",
+  "explore-3",
+  "issues-1",
+  "issues-3",
+  "members-1",
+  "profile-1",
+  "profile-3",
+  "repos-1",
+  "social-1"
+ ],
+ "only_in_v1": [
+  {
+   "src": "/",
+   "role": "link",
+   "name": "{owner}/{repo}",
+   "scope": "main:{owner} - Dashboard",
+   "dst": "/:owner/:repo",
+   "successes": 4,
+   "failures": 5
+  }
+ ],
+ "only_in_v2": [
+  {
+   "src": "/",
+   "role": "link",
+   "name": "{owner}/{repo}",
+   "scope": "main:byteblaze - Dashboard",
+   "dst": "/:owner/:repo",
+   "sources": [
+    "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0",
+    "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0",
+    "2026-10-16_02-08-05_PathMemory-none_on_pathmemory.social-1_0",
+    "2026-10-16_02-33-45_PathMemory-none_on_pathmemory.explore-2_0"
+   ]
+  }
+ ],
+ "same_step_different_counters": [
+  {
+   "step": [
+    "/:owner/:repo",
+    "link",
+    "Settings",
+    "navigation",
+    "/:owner/:repo/settings"
+   ],
+   "v1": [
+    2,
+    0
+   ],
+   "v2": [
+    1,
+    0
+   ]
+  },
+  {
+   "step": [
+    "/:owner/:repo/settings",
+    "link",
+    "Collaborators",
+    "main:Repository",
+    "/:owner/:repo/settings/collaboration"
+   ],
+   "v1": [
+    2,
+    0
+   ],
+   "v2": [
+    1,
+    0
+   ]
+  }
+ ]
+}

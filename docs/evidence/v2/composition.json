@@ -1,0 +1,374 @@
+{
+ "graph": "pathmemory_v2",
+ "graph_fingerprint": "ff0899ff00fbb4d5",
+ "flat_store": "docs/evidence/v2/memory/flat_memory.json",
+ "request": {
+  "from": "/",
+  "to": "/:owner/:repo/issues/new"
+ },
+ "cypher": "MATCH (a:State {key:$src}), (b:State {key:$dst})\nMATCH p = (a)-[:ACT*1..6]->(b)\nWHERE all(r IN relationships(p) WHERE r.successes > 0 AND NOT r.eid IN $banned)\nRETURN [n IN nodes(p) | n.key] AS keys,\n       [r IN relationships(p) | [r.eid, r.role, r.name, r.scope, r.sources]] AS edges,\n       length(p) AS hops, reduce(f = 0, r IN relationships(p) | f + r.failures) AS fails\nORDER BY hops, fails LIMIT 3",
+ "normal_ui": {
+  "banned": [],
+  "routes": [
+   {
+    "keys": [
+     "/",
+     "/:owner/:repo",
+     "/:owner/:repo/issues",
+     "/:owner/:repo/issues/new"
+    ],
+    "hops": 3,
+    "fails": 0,
+    "edges": [
+     {
+      "eid": "c114f1b71d3c",
+      "role": "link",
+      "name": "{owner}/{repo}",
+      "scope": "main:byteblaze - Dashboard",
+      "sources": [
+       "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0",
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0",
+       "2026-10-16_02-08-05_PathMemory-none_on_pathmemory.social-1_0",
+       "2026-10-16_02-33-45_PathMemory-none_on_pathmemory.explore-2_0"
+      ]
+     },
+     {
+      "eid": "e89632aa108f",
+      "role": "link",
+      "name": "Issues",
+      "scope": "navigation",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     },
+     {
+      "eid": "7ec9be2148de",
+      "role": "link",
+      "name": "New Issue",
+      "scope": "main:Issues",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     }
+    ]
+   },
+   {
+    "keys": [
+     "/",
+     "/explore/repos",
+     "/:owner/:repo",
+     "/:owner/:repo/issues",
+     "/:owner/:repo/issues/new"
+    ],
+    "hops": 4,
+    "fails": 0,
+    "edges": [
+     {
+      "eid": "f9a67e94a5eb",
+      "role": "link",
+      "name": "Explore",
+      "scope": "navigation:Navigation Bar",
+      "sources": [
+       "2026-10-16_02-33-28_PathMemory-none_on_pathmemory.explore-1_0",
+       "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+      ]
+     },
+     {
+      "eid": "fc698e14a7f1",
+      "role": "link",
+      "name": "{repo}",
+      "scope": "main:Explore",
+      "sources": [
+       "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+      ]
+     },
+     {
+      "eid": "e89632aa108f",
+      "role": "link",
+      "name": "Issues",
+      "scope": "navigation",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     },
+     {
+      "eid": "7ec9be2148de",
+      "role": "link",
+      "name": "New Issue",
+      "scope": "main:Issues",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "broken_ui": {
+  "banned": [
+   "c114f1b71d3c"
+  ],
+  "why": "dashboard repo link hidden: replay finds no such link and bans the step",
+  "routes": [
+   {
+    "keys": [
+     "/",
+     "/explore/repos",
+     "/:owner/:repo",
+     "/:owner/:repo/issues",
+     "/:owner/:repo/issues/new"
+    ],
+    "hops": 4,
+    "fails": 0,
+    "edges": [
+     {
+      "eid": "f9a67e94a5eb",
+      "role": "link",
+      "name": "Explore",
+      "scope": "navigation:Navigation Bar",
+      "sources": [
+       "2026-10-16_02-33-28_PathMemory-none_on_pathmemory.explore-1_0",
+       "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+      ]
+     },
+     {
+      "eid": "fc698e14a7f1",
+      "role": "link",
+      "name": "{repo}",
+      "scope": "main:Explore",
+      "sources": [
+       "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+      ]
+     },
+     {
+      "eid": "e89632aa108f",
+      "role": "link",
+      "name": "Issues",
+      "scope": "navigation",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     },
+     {
+      "eid": "7ec9be2148de",
+      "role": "link",
+      "name": "New Issue",
+      "scope": "main:Issues",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "composed_route": {
+  "keys": [
+   "/",
+   "/explore/repos",
+   "/:owner/:repo",
+   "/:owner/:repo/issues",
+   "/:owner/:repo/issues/new"
+  ],
+  "eids": [
+   "f9a67e94a5eb",
+   "fc698e14a7f1",
+   "e89632aa108f",
+   "7ec9be2148de"
+  ],
+  "sources_per_hop": [
+   [
+    "2026-10-16_02-33-28_PathMemory-none_on_pathmemory.explore-1_0",
+    "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+   ],
+   [
+    "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+   ],
+   [
+    "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+   ],
+   [
+    "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+   ]
+  ],
+  "distinct_source_episodes": [
+   "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0",
+   "2026-10-16_02-33-28_PathMemory-none_on_pathmemory.explore-1_0",
+   "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+  ],
+  "essential_episodes": [
+   "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0",
+   "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0"
+  ]
+ },
+ "single_episode_containment": {
+  "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0": {
+   "task": "members-1",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": []
+  },
+  "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0": {
+   "task": "issues-1",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": [
+    "e89632aa108f",
+    "7ec9be2148de"
+   ]
+  },
+  "2026-10-16_02-04-52_PathMemory-none_on_pathmemory.issues-3_0": {
+   "task": "issues-3",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": []
+  },
+  "2026-10-16_02-05-25_PathMemory-none_on_pathmemory.profile-1_0": {
+   "task": "profile-1",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": []
+  },
+  "2026-10-16_02-05-53_PathMemory-none_on_pathmemory.profile-3_0": {
+   "task": "profile-3",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": []
+  },
+  "2026-10-16_02-06-21_PathMemory-none_on_pathmemory.repos-1_0": {
+   "task": "repos-1",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": []
+  },
+  "2026-10-16_02-08-05_PathMemory-none_on_pathmemory.social-1_0": {
+   "task": "social-1",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": []
+  },
+  "2026-10-16_02-33-28_PathMemory-none_on_pathmemory.explore-1_0": {
+   "task": "explore-1",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": [
+    "f9a67e94a5eb"
+   ]
+  },
+  "2026-10-16_02-33-45_PathMemory-none_on_pathmemory.explore-2_0": {
+   "task": "explore-2",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": []
+  },
+  "2026-10-18_17-56-16_PathMemory-none_on_pathmemory.explore-3_0": {
+   "task": "explore-3",
+   "contiguous": false,
+   "all_steps_somewhere": false,
+   "steps_of_route_present": [
+    "f9a67e94a5eb",
+    "fc698e14a7f1"
+   ]
+  }
+ },
+ "no_single_episode_contains_route": true,
+ "flat_replay_routes": {
+  "normal_ui": [
+   {
+    "keys": [
+     "/",
+     "/:owner/:repo",
+     "/:owner/:repo/issues",
+     "/:owner/:repo/issues/new"
+    ],
+    "edges": [
+     {
+      "eid": "c114f1b71d3c",
+      "kind": "click",
+      "role": "link",
+      "name": "{owner}/{repo}",
+      "pre": [],
+      "scope": "main:byteblaze - Dashboard",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     },
+     {
+      "eid": "e89632aa108f",
+      "kind": "click",
+      "role": "link",
+      "name": "Issues",
+      "pre": [],
+      "scope": "navigation",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     },
+     {
+      "eid": "7ec9be2148de",
+      "kind": "click",
+      "role": "link",
+      "name": "New Issue",
+      "pre": [],
+      "scope": "main:Issues",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     }
+    ]
+   }
+  ],
+  "broken_ui": []
+ },
+ "ablation": {
+  "graph": "pathmemory_v2_ablated",
+  "fingerprint": "93e0b6bd12e2831c",
+  "removed": "fc698e14a7f1",
+  "bridge_present": false,
+  "broken_ui_routes": [],
+  "normal_ui_routes": [
+   {
+    "keys": [
+     "/",
+     "/:owner/:repo",
+     "/:owner/:repo/issues",
+     "/:owner/:repo/issues/new"
+    ],
+    "hops": 3,
+    "fails": 0,
+    "edges": [
+     {
+      "eid": "c114f1b71d3c",
+      "role": "link",
+      "name": "{owner}/{repo}",
+      "scope": "main:byteblaze - Dashboard",
+      "sources": [
+       "2026-10-16_02-03-36_PathMemory-none_on_pathmemory.members-1_0",
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0",
+       "2026-10-16_02-08-05_PathMemory-none_on_pathmemory.social-1_0",
+       "2026-10-16_02-33-45_PathMemory-none_on_pathmemory.explore-2_0"
+      ]
+     },
+     {
+      "eid": "e89632aa108f",
+      "role": "link",
+      "name": "Issues",
+      "scope": "navigation",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     },
+     {
+      "eid": "7ec9be2148de",
+      "role": "link",
+      "name": "New Issue",
+      "scope": "main:Issues",
+      "sources": [
+       "2026-10-16_02-04-17_PathMemory-none_on_pathmemory.issues-1_0"
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

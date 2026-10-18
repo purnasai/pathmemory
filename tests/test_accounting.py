@@ -71,3 +71,30 @@ def test_usage_flags_inconsistent_totals():
     s = _summary([{"input_tokens": 500, "output_tokens": 5, "pm_base_calls": 1, "pm_base_input_tokens": 400,
                    "pm_base_output_tokens": 5}])
     assert usage(s)["accounting_consistent"] is False
+
+
+def test_replay_metrics_from_event_log():
+    from pathmemory.run import replay_metrics
+    assert replay_metrics([])["route_hops"] == 0  # no-memory runs have no route
+    log = [{"event": "choose"},
+           {"event": "route", "keys": ["/", "/r"], "eids": ["d"], "sources": [["A"]]},
+           {"event": "edge_failed", "why": "link '{owner}/{repo}': hidden"},
+           {"event": "edge_failed", "why": "link 'X': missing"},
+           {"event": "route", "keys": ["/", "/e", "/r"], "eids": ["x", "b"], "sources": [["A", "C"], ["B"]]},
+           {"event": "recovered"},
+           {"event": "edge_failed", "why": "wrong entity: owner=x (chose y)"}]
+    m = replay_metrics(log)
+    assert (m["route_hops"], m["source_episodes"], m["recoveries"]) == (2, ["A", "B", "C"], 1)
+    assert (m["failed_edge_checks"], m["wrong_target_actions"], m["unsafe_targets_refused"]) == (3, 1, 1)
+
+
+def test_replay_reached_goal_separates_memory_success_from_llm_fallback():
+    from pathmemory.compare import replay_reached_goal
+    composed = [{"event": "route", "keys": ["/", "/r"]}, {"event": "edge_failed", "why": "x: missing"},
+                {"event": "route", "keys": ["/", "/e", "/r"]}, {"event": "recovered"},
+                {"event": "replay"}, {"event": "replay"}]
+    assert replay_reached_goal({"log": composed})
+    assert not replay_reached_goal({"log": composed[:-1]})                       # stopped one hop short
+    assert not replay_reached_goal({"log": composed + [{"event": "edge_failed", "why": "wrong entity: x"}]})
+    assert not replay_reached_goal({"log": [{"event": "route", "keys": ["/", "/r"]}, {"event": "no_route"}]})
+    assert not replay_reached_goal({"log": []})                                  # no memory, LLM only

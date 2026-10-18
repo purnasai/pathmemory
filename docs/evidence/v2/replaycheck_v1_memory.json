@@ -1,0 +1,195 @@
+{
+ "graph": "pathmemory_v1",
+ "replayed_clicks": 46,
+ "tally": {
+  "matcher": {
+   "same_target": 46
+  },
+  "name": {
+   "match": 46
+  },
+  "scope": {
+   "unverifiable": 14,
+   "match": 32
+  },
+  "role": {
+   "match": 46
+  },
+  "dest": {
+   "match": 46
+  },
+  "result": {
+   "n/a": 46
+  }
+ },
+ "exceptions": [
+  {
+   "run": "2026-10-16_02-13-24_PathMemory-graph_on_pathmemory.members-2_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-14-25_PathMemory-graph_on_pathmemory.members-3_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-15-56_PathMemory-graph_on_pathmemory.members-4_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-17-58_PathMemory-graph_on_pathmemory.issues-2_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-19-34_PathMemory-graph_on_pathmemory.issues-4_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-20-39_PathMemory-graph_on_pathmemory.issues-5_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-21-16_PathMemory-graph_on_pathmemory.issues-6_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-21-55_PathMemory-graph_on_pathmemory.issues-7_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-27-18_PathMemory-graph_on_pathmemory.repos-3_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-28-51_PathMemory-graph_on_pathmemory.repos-5_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-31-23_PathMemory-graph_on_pathmemory.repos-5_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-31-50_PathMemory-graph_on_pathmemory.repos-3_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-16_02-56-08_PathMemory-graph_on_pathmemory.repos-3_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  },
+  {
+   "run": "2026-10-18_17-42-37_PathMemory-graph_on_pathmemory.issues-5_0",
+   "step": 0,
+   "page": "/",
+   "target": "{owner}/{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "unverifiable",
+   "role": "match",
+   "dest": "match"
+  }
+ ]
+}

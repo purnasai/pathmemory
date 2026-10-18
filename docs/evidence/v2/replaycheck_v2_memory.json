@@ -1,0 +1,39 @@
+{
+ "graph": "pathmemory_v2",
+ "replayed_clicks": 57,
+ "tally": {
+  "matcher": {
+   "same_target": 57
+  },
+  "name": {
+   "match": 57
+  },
+  "scope": {
+   "match": 57
+  },
+  "role": {
+   "match": 57
+  },
+  "dest": {
+   "match": 56,
+   "mismatch": 1
+  },
+  "result": {
+   "n/a": 57
+  }
+ },
+ "exceptions": [
+  {
+   "run": "2026-10-18_18-04-37_PathMemory-probe_on_pathmemory.issues-5_0",
+   "step": 1,
+   "page": "/explore/repos",
+   "target": "{repo}",
+   "stored": 1,
+   "matcher": "same_target",
+   "name": "match",
+   "scope": "match",
+   "role": "match",
+   "dest": "mismatch: /:owner/:repo ['owner']"
+  }
+ ]
+}

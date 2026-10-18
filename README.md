@@ -27,7 +27,30 @@ in FalkorDB and lets later tasks reuse it:
 Explore (green), a route verified by one earlier repair run; 4 clicks are replayed with no LLM call, then the
 LLM adds the collaborator.*
 
-## Results (local Gitea, `gpt-6-luna`, same agent/prompt/budget in every mode)
+## Results v2 (2026-10-18): route composition, four modes
+
+One held-out task (`issues-2`), 5 trials per mode, a demonstration and not a benchmark. Memory built from
+10 named training episodes, none of them a test task. Details: [docs/evidence/v2/FAIR_COMPARISON.md](docs/evidence/v2/FAIR_COMPARISON.md),
+[COMPOSITION.md](docs/evidence/v2/COMPOSITION.md), [DEMO_WALKTHROUGH.md](docs/evidence/v2/DEMO_WALKTHROUGH.md).
+
+| Condition | No memory | Flat prompt (top-3) | Flat replay (one trajectory) | **Graph (FalkorDB)** |
+|---|---|---|---|---|
+| Normal UI: success / model calls / input tokens | 5/5 · 8.0 · 22.8k | 5/5 · 8.2 · 26.4k | 5/5 · 6.0 · 14.8k | 5/5 · 6.0 · 14.9k |
+| Dashboard repo links hidden: success / model calls / input tokens | 5/5 · 7.0 · 20.6k | 5/5 · 7.6 · 25.4k | 5/5 · 8.4 · 23.7k | 5/5 · **6.0** · **15.0k** |
+| … memory replay reached the goal page | – | – | 0/5 | **5/5** |
+
+- With the dashboard links hidden, graph memory joined steps from two training runs (explore-3: Explore → repo;
+  issues-1: repo → Issues → New Issue) into a route neither contained, and replayed it in 5/5 trials. Flat replay
+  (same chooser, matcher and checks, one trajectory at a time) had no route. Removing the bridge step from a copy
+  of the graph removed the route (0/5 replays).
+- Every mode succeeded every time. The gain is cost: fewer model calls and 27–41% fewer input tokens under the
+  break. On the normal UI flat replay ties graph, and with the links hidden the no-memory agent used fewer browser
+  steps (7 vs 9, via an issue link in the activity feed).
+
+## Historical results v1 (2026-10-16, as recorded; see corrections)
+
+> v1 memory included a repair episode of `members-2`, a test task, so the v1 "after one repair episode" rows are not
+> held-out results. v2 replaces that with a training-only memory.
 
 > **Correction (2026-10-18, branch `p0-correctness`):** the "LLM calls" columns below count LLM-chosen browser steps, not model calls. Counting the destination chooser and parse retries, graph mode made **more** model calls than no memory on the normal UI (4.64 vs 4.21 per task); the input-token savings stand. `repos-5` was run twice with different goals. v1 evaluation also wrote failure counts to its own memory and did not reset the site before read-only tasks. Details and corrected numbers: [docs/evidence/v1-derived/CORRECTIONS.md](docs/evidence/v1-derived/CORRECTIONS.md).
 

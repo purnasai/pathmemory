@@ -7,6 +7,7 @@ re-running the LLM. Writes both stores from the same trajectories:
 """
 
 import gzip
+import hashlib
 import json
 import pickle
 from pathlib import Path
@@ -85,14 +86,19 @@ def trajectory(exp_dir: Path) -> dict | None:
     return {"task_id": task_id, "rows": rows}
 
 
-def ingest(exp_dirs: list[Path], graph: GraphMemory) -> dict:
-    flat = json.loads(FLAT_STORE.read_text()) if FLAT_STORE.exists() else []
+def ingest(exp_dirs: list[Path], graph: GraphMemory, flat_path: Path = FLAT_STORE, provenance: bool = False) -> dict:
+    """provenance=True tags every edge with the episode (run directory name) that showed it, and stores each
+    episode's navigation steps in the flat store (used by the flat-replay baseline)."""
+    flat_path = Path(flat_path)
+    flat = json.loads(flat_path.read_text()) if flat_path.exists() else []
     seen = {t["task_id"] for t in flat}
     added = 0
     for d in exp_dirs:
         tr = trajectory(Path(d))
         if not tr:
             continue
+        episode = Path(d).name if provenance else None
+        nav = []
         spec = TASKS_BY_ID[tr["task_id"]]
         rows = tr["rows"]
         # Every verified navigation click becomes an edge, wherever it happens (detours and repairs included).
@@ -101,7 +107,9 @@ def ingest(exp_dirs: list[Path], graph: GraphMemory) -> dict:
         for r in rows:
             step, moved = r["step"], r["src"].key != r["dst"].key
             if step.kind == "click" and r["ok"] and moved and step.navigational:
-                graph.record_transition(r["src"], step, r["dst"], ok=True, pre=pending)
+                eid = graph.record_transition(r["src"], step, r["dst"], ok=True, pre=pending, source=episode)
+                nav.append({"eid": eid, "src": r["src"].key, "dst": r["dst"].key, "role": step.role, "name": step.name,
+                            "scope": step.scope, "pre": [f"{p.role}|{p.name}|{p.scope}" for p in pending]})
                 worksite, work_steps, pending = None, [], []
                 continue
             if step.kind == "click" and r["ok"] and not moved and step.role in POPUP_ROLES:
@@ -119,10 +127,63 @@ def ingest(exp_dirs: list[Path], graph: GraphMemory) -> dict:
         if worksite:
             graph.record_worksite(spec.id, spec.goal, spec.cluster, worksite, work_steps[:8])
         if spec.id not in seen:
-            flat.append({"task_id": spec.id, "goal": spec.goal,
-                         "steps": [{"url": r["url"], "action": r["raw_text"]} for r in rows]})
+            entry = {"task_id": spec.id, "goal": spec.goal,
+                     "steps": [{"url": r["url"], "action": r["raw_text"]} for r in rows]}
+            if provenance:
+                entry.update(episode=episode, nav=nav, worksite=worksite.key if worksite else None,
+                             work_steps=work_steps[:8])
+            flat.append(entry)
             seen.add(spec.id)
         added += 1
-    FLAT_STORE.parent.mkdir(parents=True, exist_ok=True)
-    FLAT_STORE.write_text(json.dumps(flat, indent=1))
+    flat_path.parent.mkdir(parents=True, exist_ok=True)
+    flat_path.write_text(json.dumps(flat, indent=1))
     return {"trajectories": added, **graph.stats()}
+
+
+def _sha_files(files) -> str:
+    h = hashlib.sha256()
+    for f in sorted(files):
+        h.update(f.name.encode())
+        h.update(f.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def run_goal(exp_dir: Path) -> str:
+    goal = pickle.load(gzip.open(exp_dir / "goal_object.pkl.gz"))
+    text = next((m.get("text", "") for m in goal or [] if m.get("type") == "text"), "")
+    return text.split(" When you are done, send me")[0]
+
+
+def build_memory(exp_dirs: list[Path], graph: GraphMemory, flat_path: Path, forbidden_tasks: set[str]) -> dict:
+    """A fresh memory (graph + flat store) from explicitly named episodes, with a manifest proving what went in.
+
+    Refuses episodes of forbidden (test) tasks and episodes whose goal differs from the task's current definition.
+    """
+    from pathmemory.run import task_sha  # run imports this module
+
+    episodes = []
+    for d in (Path(x).resolve() for x in exp_dirs):
+        exp_args = pickle.load(open(d / "exp_args.pkl", "rb"))
+        task_id = exp_args.env_args.task_name.removeprefix("pathmemory.")
+        if task_id in forbidden_tasks:
+            raise ValueError(f"{d.name}: {task_id} is a held-out task; it must not enter training memory")
+        goal = run_goal(d)
+        if goal != TASKS_BY_ID[task_id].goal:
+            raise ValueError(f"{d.name}: ran goal {goal!r}, current definition is {TASKS_BY_ID[task_id].goal!r}")
+        summary = json.loads((d / "summary_info.json").read_text())
+        episodes.append({"episode": d.name, "dir": str(d.relative_to(settings.root)), "task": task_id,
+                         "task_sha": task_sha(task_id), "goal_sha": hashlib.sha256(goal.encode()).hexdigest()[:12],
+                         "success": summary.get("cum_reward", 0) > 0, "steps": summary.get("n_steps"),
+                         "files_sha": _sha_files([*d.glob("step_*.pkl.gz"), d / "summary_info.json",
+                                                  d / "exp_args.pkl", d / "goal_object.pkl.gz"])})
+    graph.clear()
+    Path(flat_path).unlink(missing_ok=True)
+    stats = ingest([settings.root / e["dir"] for e in episodes], graph, flat_path, provenance=True)
+    used = {x for e in graph.edges() for x in e["sources"] or []}
+    for e in episodes:
+        e["used"] = e["success"]  # only successful episodes are ingested
+        e["edges_taught"] = sum(e["episode"] in (x["sources"] or []) for x in graph.edges())
+    assert used <= {e["episode"] for e in episodes}
+    return {"graph": graph.name, "fingerprint": graph.fingerprint(), "stats": stats,
+            "flat_store": str(Path(flat_path).resolve().relative_to(settings.root)), "flat_sha": _sha_files([Path(flat_path)]),
+            "forbidden_tasks": sorted(forbidden_tasks), "episodes": episodes}

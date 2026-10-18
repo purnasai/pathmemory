@@ -11,6 +11,7 @@ differs (goal changed between runs) are flagged rather than pooled.
 
 import argparse
 import gzip
+import hashlib
 import json
 import pickle
 from collections import defaultdict
@@ -19,32 +20,49 @@ from pathlib import Path
 from pathmemory.config import settings
 
 RESULTS = settings.root / "results"
-MODES = ["none", "flat", "graph"]
+MODES = ["none", "flat", "flatreplay", "graph"]
 POLICIES = ("first", "latest")
 
 
+def definition(row) -> str | None:
+    """Task definition hash: recorded task_sha (schema 2), else a hash of the goal the run actually had."""
+    if row.get("task_sha"):
+        return row["task_sha"]
+    goal = goal_of(row)
+    return "goal:" + hashlib.sha256(goal.encode()).hexdigest()[:10] if goal else None
+
+
 def load_rows(path) -> list[dict]:
-    """Every observation in file order, annotated with its line and its attempt number within (task, mode)."""
-    rows, seen = [], defaultdict(int)
+    """Every observation in file order, annotated with its line, its task definition, and its attempt number
+    within (task, definition, mode). A task id that ran under several definitions is split into one
+    reporting unit per definition ("repos-5@<hash>"), so results of different tasks are never aggregated."""
+    rows = []
     for line_no, line in enumerate(Path(path).read_text().splitlines(), 1):
-        if not line.strip():
-            continue
-        r = json.loads(line)
-        seen[(r["task"], r["mode"])] += 1
-        rows.append({**r, "_line": line_no, "_attempt": seen[(r["task"], r["mode"])]})
+        if line.strip():
+            r = json.loads(line)
+            rows.append({**r, "_line": line_no, "_def": definition(r)})
+    defs = defaultdict(set)
     for r in rows:
-        r["_attempts"] = seen[(r["task"], r["mode"])]
+        defs[r["task"]].add(r["_def"])
+    seen = defaultdict(int)
+    for r in rows:
+        r["_unit"] = r["task"] if len(defs[r["task"]]) == 1 else f"{r['task']}@{(r['_def'] or 'unknown')[-6:]}"
+        seen[(r["_unit"], r["mode"])] += 1
+        r["_attempt"] = seen[(r["_unit"], r["mode"])]
+    for r in rows:
+        r["_attempts"] = seen[(r["_unit"], r["mode"])]
     return rows
 
 
 def select(rows: list[dict], policy: str) -> dict:
-    """{task: {mode: row}} with one attempt per (task, mode), chosen by policy ("first" or "latest")."""
+    """{unit: {mode: row}} with one attempt per (task definition, mode), chosen by policy ("first" or "latest").
+    Attempts of different definitions are different units and are never chosen between."""
     if policy not in POLICIES:
         raise ValueError(f"policy must be one of {POLICIES}, got {policy!r}")
     by = defaultdict(dict)
     for r in rows:
-        if policy == "latest" or r["mode"] not in by[r["task"]]:
-            by[r["task"]][r["mode"]] = r
+        if policy == "latest" or r["mode"] not in by[r["_unit"]]:
+            by[r["_unit"]][r["mode"]] = r
     return dict(by)
 
 
@@ -70,14 +88,15 @@ def duplicates(rows: list[dict]) -> list[dict]:
     """Every (task, mode) with more than one attempt, all attempts listed, plus whether the task changed."""
     groups = defaultdict(list)
     for r in rows:
-        groups[(r["task"], r["mode"])].append(r)
+        groups[(r["task"], r["mode"])].append(r)  # by id, so a definition change under one id is always shown
     out = []
     for (task, mode), rs in groups.items():
         if len(rs) < 2:
             continue
-        attempts = [{"attempt": r["_attempt"], "line": r["_line"], "success": r["success"], "steps": r["steps"],
-                     "task_sha": r.get("task_sha"), "goal": goal_of(r), "exp_dir": r["exp_dir"]} for r in rs]
-        ids = {a["task_sha"] or a["goal"] for a in attempts}
+        attempts = [{"attempt": r["_attempt"], "unit": r["_unit"], "line": r["_line"], "success": r["success"],
+                     "steps": r["steps"], "definition": r["_def"], "goal": goal_of(r), "exp_dir": r["exp_dir"]}
+                    for r in rs]
+        ids = {a["definition"] for a in attempts}
         out.append({"task": task, "mode": mode, "attempts": attempts,
                     "same_definition": None if None in ids else len(ids) == 1})
     return out

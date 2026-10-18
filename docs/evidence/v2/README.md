@@ -22,3 +22,15 @@ No v2 evaluation has been run. This folder holds only what was needed to check t
     Gitea fixture fingerprint `32f2a9ca533fd2ce`.
 
 Two runs on one task prove the plumbing works. They say nothing about success rates or savings.
+
+## P1 (branch p1-composition): composition and four-mode comparison
+
+- [COMPOSITION.md](COMPOSITION.md): training episodes, composed route, per-hop sources, Cypher, absence from every
+  single episode, ablation, browser outcome. Raw: `composition.json`.
+- [FAIR_COMPARISON.md](FAIR_COMPARISON.md): none / flat / flatreplay / graph on `issues-2`, normal UI, broken UI
+  and ablation, 5 trials each. Raw: `runs/*.jsonl`, `runs/comparison.json`.
+- [DEMO_WALKTHROUGH.md](DEMO_WALKTHROUGH.md): screenshots of one composed-route run.
+- `memory/`: v2 manifest (episodes, hashes, fingerprint, edges with sources), flat store, ablation record, v1-vs-v2 diff.
+- `replaycheck_v1_memory.json`, `replaycheck_v2_memory.json`: replayed clicks checked against the memory replayed.
+- `migration_v1_copy.json`: scoped edge-id migration on a disposable copy of v1.
+- `probes.jsonl`: no-LLM real-browser wrong-entity and ambiguous-target probes.

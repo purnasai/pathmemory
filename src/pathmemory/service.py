@@ -27,6 +27,9 @@ EXPERIMENTS = [
     ("v1/eval.jsonl", "Normal UI — 14 held-out tasks"),
     ("v1/recovery.jsonl", "UI break — before any repair is learned"),
     ("v1-repaired/recovery.jsonl", "UI break — after learning from one repair episode"),
+    ("v2-normal/eval.jsonl", "v2 — issues-2, normal UI, 4 modes x 5 trials (v2 memory, no test-task episodes)"),
+    ("v2-broken/eval.jsonl", "v2 — issues-2, dashboard repo links hidden: composed route via Explore"),
+    ("v2-ablation/eval.jsonl", "v2 — same, graph with the Explore→repo bridge step removed"),
 ]
 # The published v1 tables used the latest attempt of a repeated (task, mode); the UI says so and lists the others.
 EXPERIMENT_SELECTION = "latest"

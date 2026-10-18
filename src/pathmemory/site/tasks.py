@@ -139,6 +139,11 @@ TASKS = [
              url_pattern=r"/explore/repos"),
     TaskSpec("explore-2", "explore", "navigate", "Browse the site's public repositories and open the primer/design repository.",
              url_pattern=r"/primer/design/?$"),
+    # Added for v2 (2026-10-18): explore-2's only saved episode took the dashboard shortcut, so no training
+    # episode taught Explore -> repository; v1 had that hop only from a test-task (members-2) repair episode.
+    TaskSpec("explore-3", "explore", "navigate",
+             "Using the Explore page's list of repositories (not the dashboard), open the a11yproject.com repository.",
+             url_pattern=r"/a11yproject/a11yproject\.com/?$"),
     # --- social
     TaskSpec("social-1", "social", "mutate", "Star the a11yproject.com repository.", starred("a11yproject/a11yproject.com")),
     TaskSpec("social-2", "social", "mutate", "Follow the user alice.", following("alice")),

@@ -1,5 +1,9 @@
 # PathMemory — results (v1, 2026-10-16)
 
+> **v2 (2026-10-18):** new training-only memory and a four-mode comparison on the composition case are in
+> [docs/evidence/v2/FAIR_COMPARISON.md](docs/evidence/v2/FAIR_COMPARISON.md). v1 memory contained a repair episode of the test task
+> `members-2`; the v1 numbers below are kept as recorded.
+
 > **Correction (2026-10-18, branch `p0-correctness`):** the "LLM calls" columns below count LLM-chosen browser steps, not model calls. Counting the destination chooser and parse retries, graph mode made **more** model calls than no memory on the normal UI (4.64 vs 4.21 per task); the input-token savings stand. `repos-5` was run twice with different goals. v1 evaluation also wrote failure counts to its own memory and did not reset the site before read-only tasks. Details and corrected numbers: [docs/evidence/v1-derived/CORRECTIONS.md](docs/evidence/v1-derived/CORRECTIONS.md).
 
 Same agent (AgentLab GenericAgent), same model (`gpt-6-luna`), same prompts, action set (`chat` + `bid`, no `goto`)

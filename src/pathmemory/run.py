@@ -6,6 +6,10 @@
     uv run python -m pathmemory.run ingest results/x/learn/* --keep  # add saved runs to memory
     uv run python -m pathmemory.run live members-4 --break-ui --learn # visible run; successful run is learned
     uv run python -m pathmemory.run restore-memory                   # undo live learning (back to v1 memory)
+    uv run python -m pathmemory.run build-memory DIRS... --graph pathmemory_v2 --flat F --manifest M  # v2 memory
+    uv run python -m pathmemory.run ablate --snapshot pathmemory_v2 --graph pathmemory_v2_ablated --edge EID
+    uv run python -m pathmemory.run eval issues-2 --modes none flat flatreplay graph --snapshot pathmemory_v2 \
+        --flat docs/evidence/v2/memory/flat_memory.json --break-ui --trials 3
 """
 
 import argparse
@@ -27,7 +31,7 @@ from bgym import HighLevelActionSetArgs
 from pathmemory.agent import PathMemoryAgentArgs, write_json
 from pathmemory.config import settings
 from pathmemory.graph import GraphMemory
-from pathmemory.learn import FLAT_STORE, backup_memory, ingest, memory_diff, restore_memory
+from pathmemory.learn import FLAT_STORE, backup_memory, build_memory, ingest, memory_diff, restore_memory
 from pathmemory.site import seed
 from pathmemory.site.tasks import HIDE_DASHBOARD_REPO_LINKS, TASKS_BY_ID, register_all
 
@@ -38,7 +42,7 @@ TRAIN = ["members-1", "issues-1", "issues-3", "profile-1", "profile-3", "repos-1
 TEST = ["members-2", "members-3", "members-4", "issues-2", "issues-4", "issues-5", "issues-6", "issues-7",
         "profile-2", "profile-4", "repos-2", "repos-3", "repos-5", "social-2"]
 # Learned after TRAIN to give the graph a second way into repos; RECOVERY tasks then run with that way broken.
-ALT_TRAIN = ["explore-1", "explore-2"]
+ALT_TRAIN = ["explore-1", "explore-2", "explore-3"]  # explore-3 added in v2
 RECOVERY = ["members-2", "members-4", "issues-2", "issues-5", "repos-3"]
 
 
@@ -105,6 +109,26 @@ def usage(summary: dict) -> dict:
     }
 
 
+def replay_metrics(log: list[dict]) -> dict:
+    """Route and recovery facts from the agent's event log (replay modes; zeros otherwise)."""
+    routes = [e for e in log if e["event"] == "route"]
+    fails = [e for e in log if e["event"] == "edge_failed"]
+    last = routes[-1] if routes else None
+    return {
+        "routes_tried": [e["keys"] for e in routes],
+        "route_hops": len(last["keys"]) - 1 if last else 0,
+        "route_eids": last.get("eids") if last else [],
+        "source_episodes": sorted({x for srcs in ((last or {}).get("sources") or []) for x in (srcs or [])}),
+        "recoveries": sum(e["event"] == "recovered" for e in log),
+        "failed_edge_checks": len(fails),
+        # a replayed click that ran but led somewhere memory did not predict (page type or entity)
+        "wrong_target_actions": sum(e["why"].startswith(("expected ", "wrong entity")) for e in fails),
+        # a target was on the page but not safe to click (absent targets, ": missing", are not counted here)
+        "unsafe_targets_refused": sum(e["why"].endswith((": hidden", ": ambiguous", ": out_of_scope", ": unbound",
+                                                         ": wrong_entity")) for e in fails),
+    }
+
+
 def reset_site(expected: str | None = None) -> str:
     """Fresh Gitea fixture; raises if it does not match the fixture the batch started from."""
     seed.reset()
@@ -117,8 +141,10 @@ def reset_site(expected: str | None = None) -> str:
 def run_task(task_id: str, agent, out_dir: Path, max_steps=15, ui_break=None, headless=True, slow_mo=None,
              reset: bool | None = None, fixture: str | None = None) -> dict:
     """reset=None keeps the demo behaviour (reset only before data-changing tasks); experiments pass True."""
+    t_reset = time.time()
     if reset or (reset is None and TASKS_BY_ID[task_id].kind == "mutate"):
         fixture = reset_site(fixture)
+    reset_seconds = round(time.time() - t_reset, 1)
     env_args = EnvArgs(task_name=f"pathmemory.{task_id}", task_seed=0, max_steps=max_steps, headless=headless,
                        slow_mo=slow_mo, task_kwargs={"ui_break": ui_break} if ui_break else None)
     exp = ExpArgs(agent_args=agent, env_args=env_args)
@@ -142,7 +168,11 @@ def run_task(task_id: str, agent, out_dir: Path, max_steps=15, ui_break=None, he
         # browser steps by who chose the action; model calls are counted separately (chooser + base, incl. retries)
         "llm_steps": sources["llm"], "replayed_steps": sources["graph"],
         **usage(summary),
-        "seconds": seconds, "err": summary.get("err_msg"),
+        **replay_metrics(log),
+        # seconds = episode wall time (browser start, login, agent, env); fixture reset is reset_seconds
+        "seconds": seconds, "reset_seconds": reset_seconds,
+        "est_cost_usd": round(float(summary.get("stats.cum_cost") or 0), 6),  # AgentLab tracker x litellm price table
+        "err": summary.get("err_msg"),
         "recovered": any(e["event"] == "recovered" for e in log),
         "edge_failures": sum(e["event"] == "edge_failed" for e in log),
         "fixture": fixture, "started": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t0)),
@@ -159,18 +189,25 @@ def write(rows, path: Path):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("phase", choices=["smoke", "learn", "ingest", "eval", "recovery", "live", "restore-memory"])
+    p.add_argument("phase", choices=["smoke", "learn", "ingest", "eval", "recovery", "live", "restore-memory",
+                                      "build-memory", "ablate"])
     p.add_argument("tasks", nargs="*")
-    p.add_argument("--modes", nargs="+", default=["none", "flat", "graph"])
+    p.add_argument("--modes", nargs="+", default=["none", "flat", "graph"],
+                   choices=["none", "flat", "flatreplay", "graph"])
     p.add_argument("--max-steps", type=int, default=15)
     p.add_argument("--tag", default=time.strftime("%Y%m%d-%H%M%S"))
     p.add_argument("--keep", action="store_true", help="learn: add to existing memory instead of clearing it")
     p.add_argument("--mode", default="graph", help="live: memory mode")
-    p.add_argument("--break-ui", action="store_true", help="live: hide the dashboard repo links")
+    p.add_argument("--break-ui", action="store_true", help="live/eval: hide the dashboard repo links")
     p.add_argument("--live-file", help="live: progress JSON for the demo UI")
     p.add_argument("--learn", action="store_true", help="live: write the run's verified steps to memory if it succeeds")
     p.add_argument("--snapshot", default="pathmemory",
                    help="eval/recovery: memory graph to evaluate from; it is copied, never written")
+    p.add_argument("--flat", default=str(FLAT_STORE), help="eval/recovery: flat store (copied once per batch)")
+    p.add_argument("--trials", type=int, default=1, help="eval/recovery: repeat every (task, mode) this many times")
+    p.add_argument("--graph", help="build-memory/ablate: graph to write")
+    p.add_argument("--manifest", help="build-memory: manifest JSON to write")
+    p.add_argument("--edge", nargs="+", help="ablate: edge ids to remove from the copy")
     a = p.parse_args()
     register_all()
     out = RESULTS / a.tag
@@ -179,6 +216,27 @@ def main():
         for t in a.tasks:
             r = run_task(t, agent_args("none"), out, a.max_steps)
             print(json.dumps({k: v for k, v in r.items() if k != "log"}))
+        return
+
+    if a.phase == "build-memory":  # tasks = run directories of training episodes
+        graph = GraphMemory(a.graph)
+        m = build_memory([Path(t) for t in a.tasks], graph, Path(a.flat), set(TEST) | set(RECOVERY))
+        m["edges"] = graph.edges()
+        Path(a.manifest).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.manifest).write_text(json.dumps(m, indent=1))
+        print(json.dumps({k: m[k] for k in ("graph", "fingerprint", "stats")}))
+        return
+
+    if a.phase == "ablate":  # copy a snapshot and remove edges from the copy only
+        assert a.graph and a.graph != a.snapshot
+        src, dst = GraphMemory(a.snapshot), GraphMemory(a.graph)
+        before = src.fingerprint()
+        dst.clear()
+        src.g.copy(a.graph)
+        removed = {e: dst.delete_edge(e) for e in a.edge}
+        assert src.fingerprint() == before
+        print(json.dumps({"snapshot": a.snapshot, "snapshot_fingerprint": before, "graph": a.graph,
+                          "removed": removed, "fingerprint": dst.fingerprint(), "stats": dst.stats()}))
         return
 
     if a.phase == "restore-memory":
@@ -237,34 +295,36 @@ def main():
             print(r["task"], "OK" if r["success"] else "FAIL", r["steps"])
         return
 
-    recovery = a.phase == "recovery"
+    broken = a.phase == "recovery" or a.break_ui
     # Frozen inputs for the whole batch: graph snapshot (copied per trial), flat store (copied once), site fixture.
     snapshot = GraphMemory(a.snapshot)
     snap_fp = snapshot.fingerprint()
     out.mkdir(parents=True, exist_ok=True)
     flat_copy = out / "flat_snapshot.json"
-    if FLAT_STORE.exists():
-        shutil.copyfile(FLAT_STORE, flat_copy)
+    if Path(a.flat).exists():
+        shutil.copyfile(a.flat, flat_copy)
+    flat_sha = file_sha(flat_copy)
     fixture = reset_site()
     work = GraphMemory(EVAL_WORK_GRAPH)
-    for t in a.tasks or (RECOVERY if recovery else TEST):
-        for mode in a.modes:
-            work.restore(a.snapshot)
-            before = work.fingerprint()
-            assert before == snap_fp, "working copy differs from the snapshot"
-            r = run_task(t, agent_args(mode, graph_name=EVAL_WORK_GRAPH, flat_store=str(flat_copy)), out / a.phase,
-                         a.max_steps, ui_break=HIDE_DASHBOARD_REPO_LINKS if recovery else None, reset=True,
-                         fixture=fixture)
-            after = work.fingerprint()
-            if snapshot.fingerprint() != snap_fp:
-                raise RuntimeError(f"memory snapshot {a.snapshot!r} changed during evaluation")
-            r["memory"] = {"snapshot": a.snapshot, "fingerprint": snap_fp, "unchanged": after == before,
-                           "flat_store_sha": file_sha(flat_copy)}
-            write([r], out / f"{a.phase}.jsonl")
-            print(f"{t:10} {mode:5} {'OK  ' if r['success'] else 'FAIL'} steps={r['steps']:>2} "
-                  f"llm_steps={r['llm_steps']:>2} replay={r['replayed_steps']:>2} calls={r['model_calls']:>2} "
-                  f"tok={r['input_tokens']:>6}")
-
+    for trial in range(1, a.trials + 1):  # trials outermost, so modes interleave over time
+        for t in a.tasks or (RECOVERY if a.phase == "recovery" else TEST):
+            for mode in a.modes:
+                work.restore(a.snapshot)
+                before = work.fingerprint()
+                assert before == snap_fp, "working copy differs from the snapshot"
+                r = run_task(t, agent_args(mode, graph_name=EVAL_WORK_GRAPH, flat_store=str(flat_copy)),
+                             out / a.phase, a.max_steps, ui_break=HIDE_DASHBOARD_REPO_LINKS if broken else None,
+                             reset=True, fixture=fixture)
+                after = work.fingerprint()
+                if snapshot.fingerprint() != snap_fp or file_sha(flat_copy) != flat_sha:
+                    raise RuntimeError("memory changed during evaluation")
+                r["trial"], r["ui_break"], r["max_steps"] = trial, broken, a.max_steps
+                r["memory"] = {"snapshot": a.snapshot, "fingerprint": snap_fp, "unchanged": after == before,
+                               "flat_store": a.flat, "flat_store_sha": flat_sha}
+                write([r], out / f"{a.phase}.jsonl")
+                print(f"{t:10} {mode:10} #{trial} {'OK  ' if r['success'] else 'FAIL'} steps={r['steps']:>2} "
+                      f"llm_steps={r['llm_steps']:>2} replay={r['replayed_steps']:>2} calls={r['model_calls']:>2} "
+                      f"tok={r['input_tokens']:>6} route={r['route_hops']} fails={r['failed_edge_checks']}", flush=True)
 
 if __name__ == "__main__":
     main()

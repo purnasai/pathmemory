@@ -92,7 +92,8 @@ def test_wrong_entity_after_click_stops_replay():
     # clicks the visible one and lands on the fork: route template matches, entity does not.
     agent = _agent([EXPLORE_EDGE, EXPLORE_REPO], "/:owner/:repo", PRIMER)
     agent.get_action(page(HOME, [("7", "link", "Explore", "navigation:Navigation Bar", True, "/explore/repos")]))
-    agent.get_action(page("http://x/explore/repos", [("9", "link", "design", "main", True, "/byteblaze/design")]))
+    # no href to inspect beforehand (e.g. a scripted link or redirect): the arrival check is the safety net
+    agent.get_action(page("http://x/explore/repos", [("9", "link", "design", "main", True, None)]))
     _, info = agent.get_action(page("http://x/byteblaze/design"))
     assert info.extra_info["pathmemory"]["source"] == "llm"
     [fail] = _events(agent, "edge_failed")
@@ -159,3 +160,11 @@ def test_legacy_over_templated_scope_still_requires_a_unique_visible_target():
     _, info = agent.get_action(page(HOME, [("5", "link", "a11yproject/a11yproject.com", "main:x", True, "/a"),
                                            ("6", "link", "a11yproject/a11yproject.com", "main:y", True, "/b")]))
     assert info.extra_info["pathmemory"]["source"] == "llm" and "ambiguous" in _events(agent, "edge_failed")[0]["why"]
+
+
+def test_link_to_another_entity_is_refused_before_clicking():
+    agent = _agent([EXPLORE_EDGE, EXPLORE_REPO], "/:owner/:repo", {"owner": "a11yproject", "repo": "design"})
+    agent.get_action(page(HOME, [("7", "link", "Explore", "navigation:Navigation Bar", True, "/explore/repos")]))
+    a, info = agent.get_action(page("http://x/explore/repos", [("9", "link", "design", "main", True, "/primer/design")]))
+    assert info.extra_info["pathmemory"]["source"] == "llm" and a != "click('9')"
+    assert _events(agent, "edge_failed")[0]["why"].endswith("wrong_entity")
