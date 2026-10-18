@@ -142,6 +142,8 @@ MATCH ()-[r:ACT {eid:$eid}]->() SET r.failures = r.failures + 1
 
 ## Architecture
 
+![PathMemory architecture: learning writes verified steps to FalkorDB; the agent chooses a target, queries a route, replays it fail-closed and hands over to the LLM](docs/architecture.gif)
+
 ```
  BrowserGym observation ──► state.py: URL → page template; element → (role, name, landmark); entities → {owner}/{repo}
                                 │
